@@ -15,9 +15,12 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
-from calibrate import FINGERING_12_HOLE_ALTO_C
+import fingering
+from config import app_dir
 
-OUT_DIR = os.path.join(os.path.dirname(__file__), "diagrams")
+FINGERING_12_HOLE_ALTO_C = {p: e["holes"] for p, e in fingering.PROFILES["12-hole Alto C"].items()}
+
+OUT_DIR = os.path.join(app_dir(), "diagrams")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 W, H = 900, 700

@@ -1,67 +1,78 @@
 # Ocarina Translator
 
-A small companion app that listens to your real ocarina through your mic and
-presses your EXISTING A/Y/X/L/R controls for you, instead of relying on
-Longshot's own (unreliable) built-in mic pitch detection.
+Play Longshot's ocarina with a real ocarina. The app listens through your mic,
+works out which note you're playing, and presses that note's button on a
+virtual Xbox controller. Your real controller keeps working alongside it.
 
-## Important: do not touch longshot_options.ini's key_note_* fields
+## Run it
 
-We tried routing this through Longshot's separate `key_note_l/r/a/y/x`
-binding slots first. Don't do that -- binding ANY of them to a real key
-disables controller-based note input entirely, even with a controller still
-plugged in and no mic conflict. `longshot_options.ini` has been fully
-restored to your original settings (backup still kept at
-`longshot_options.ini.backup` for reference) and should stay untouched.
+`dist\OcarinaTranslator.exe`, or `python app.py` from source. Settings live in
+`config.json` next to whichever one you run.
 
-Instead, `keys.py`'s `NOTE_KEYS` just mirrors your CURRENT, already-working
-`key_a` / `key_y` / `key_x` / `key_l` / `key_r` bindings and presses those
-directly -- the same inputs your keyboard (or in Y's case, left mouse
-button -- Longshot encodes mouse buttons in the same numeric field as
-keyboard keys) already triggers those controls with. If you ever rebind
-A/Y/X/L/R in Longshot's own Controls menu, update `NOTE_KEYS` in `keys.py`
-to match.
+Needs the free **ViGEmBus** driver (the Setup tab checks for it and links to it).
 
-## One-time setup
+## First-time setup (tabs, left to right)
 
-```bash
-cd /a/OcarinaTranslator
-python -m pip install sounddevice numpy
-```
-(numpy's likely already installed; sounddevice was added for this project.)
+1. **Setup** — pick your mic and watch the level bar respond, then click
+   *Measure background noise* while staying quiet. Check that the virtual
+   controller driver and Longshot's note bindings show ✔. If bindings show ✘,
+   close Longshot and click *Apply note bindings* (it backs the file up first).
+2. **Calibrate** — for each note, finger it as the picture shows, then click
+   *Record take* and play it 3 times. Blow the way you will while playing, not
+   your most careful breath. Recalibrate when you change mic or room.
+3. **Test** — play notes or practise a song; nothing reaches the game. Shows
+   the detected pitch, how far off the nearest note it is, and song progress.
+4. **Play** — click Start, then play in the game.
+5. **Game Flag** — if listening never turns on when you take the ocarina out
+   (Longshot was restarted), run the scan here to find the flag again.
+6. **Advanced** — timing and sensitivity settings.
 
-## Step 1: Calibrate to your ocarina
+## When does it listen?
 
-```bash
-python calibrate.py
-```
+- **Game flag** (default): only while Longshot shows the ocarina is up, read
+  from the game's memory. The memory location moves each time Longshot is
+  relaunched. When it can't be read, the app switches to Scroll Lock and tells
+  you, rather than going quiet.
+- **Scroll Lock**: while the Scroll Lock light is on.
+- **Always**: for testing only — stray sounds can move your character.
 
-It'll prompt you to play each of the 5 ocarina notes (A, C-Up, C-Down,
-C-Left, C-Right) one at a time, with a 3-2-1 countdown. Hold each note
-steady for the full prompt. Results are saved to `notes.json`.
+## How detection works
 
-The slot-to-button mapping (`calibrate.py`'s `NOTE_SLOTS`) is a best guess at
-which Longshot slot is which real ocarina note. If a note comes out wrong
-in-game, swap the two mismatched entries in that list -- no need to
-recalibrate, just re-run `translator.py`.
+- **YIN pitch detection** on overlapping ~21ms windows, a reading every ~5ms.
+  It doesn't jump octaves the way the first version did.
+- A note is pressed once the pitch **holds steady** for 30ms (Advanced tab).
+  The pitch sweep while your breath ramps up never holds steady, so it can't
+  trigger a stray press. Readings taken while the volume is still rising
+  don't count either.
+- Each note's acceptance window is **half the distance to its nearest
+  neighbour**, so adding notes tightens the windows instead of letting them
+  overlap.
+- The held note is **sticky**: a small wobble doesn't flip it to the next note.
+- Every press lasts at least 100ms, with a short gap between notes, so the
+  game registers it.
 
-## Step 2: Run the translator while you play
+## Files
 
-```bash
-python translator.py
-```
+| File | What it does |
+|---|---|
+| `app.py` | the app (tabs above) |
+| `engine.py` | live pipeline: mic → matcher → gate → virtual pad |
+| `audio.py`, `pitch.py` | mic selection, sliding-window YIN pitch detection |
+| `matcher.py` | readings → note press/release decisions |
+| `calibration.py`, `calibrate.py` | take recording; command-line calibration |
+| `flag_scan.py`, `memscan.py`, `ocarina_flag.py` | find/read the "ocarina is up" flag |
+| `setup_helpers.py` | driver check, Longshot note bindings |
+| `gamepad.py`, `keys.py` | virtual controller; Scroll Lock state |
+| `fingering.py`, `diagram.py` | fingering charts and pictures |
+| `translator.py` | command-line version of the Play tab |
+| `build.bat` | builds `dist\OcarinaTranslator.exe` |
 
-- Press **Scroll Lock** to toggle listening on/off -- it only reads the mic
-  while toggled ON, so background noise/talking doesn't get misread as notes
-  when you're not actually playing the ocarina.
-- Toggle it ON right before you bring up the ocarina in-game, OFF when
-  you're done.
-- Ctrl+C in the terminal to quit entirely.
+## Known gaps
 
-## If notes still feel off
+- The **A-button (LB)** and **C-Down (RB)** notes aren't calibrated yet, and
+  their fingerings aren't confirmed for the printables #474058 model.
+- The LB/RB → note mapping hasn't been tested in-game (the face buttons have).
+- Only the 12-hole Alto C fingering chart is included so far.
 
-- Re-run `calibrate.py` -- a steadier, more consistent breath per note
-  during calibration directly improves matching accuracy.
-- `MAX_CENTS_OFF` in `translator.py` controls how forgiving the pitch match
-  is (150 cents = a bit over a semitone). Lower it for stricter matching if
-  it's confusing two close notes; raise it if accurate notes are being
-  missed as "no match."
+Do **not** bind Longshot's `key_note_*` (keyboard) slots: that disabled the real
+controller entirely in testing. The app only ever uses `pad_note_*`.
