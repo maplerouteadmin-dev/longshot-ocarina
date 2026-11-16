@@ -5,3 +5,4 @@ dist/
 *.spec.bak
 config.json
 ptr_chains*.json
+arena_state/
