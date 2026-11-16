@@ -124,14 +124,17 @@ class Engine:
         if mode == "game":
             up = self.flag.read()
             if up is not None:
-                self.gate_note = "game flag"
+                self.gate_note = "game flag (auto)" if self.flag.via_chains else "game flag"
+                # the chain-found flag is steady, so it barely needs any grace
+                grace = (min(self.cfg["flag_grace_seconds"], 0.15) if self.flag.via_chains
+                         else self.cfg["flag_grace_seconds"])
                 if up:
                     state["down_since"] = None
                     state["listening"] = True
                     return True, True
                 if state["down_since"] is None:
                     state["down_since"] = now
-                if state["listening"] and now - state["down_since"] < self.cfg["flag_grace_seconds"]:
+                if state["listening"] and now - state["down_since"] < grace:
                     # the flag pulses during play -- keep a held note going, but
                     # don't start a new one from silence until it reads "up" again
                     return True, False

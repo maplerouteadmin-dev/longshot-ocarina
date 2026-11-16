@@ -11,6 +11,7 @@ Tabs:
 """
 import os
 import queue
+import sys
 import threading
 import time
 import tkinter as tk
@@ -67,9 +68,40 @@ class App(tk.Tk):
 
         self.status = ttk.Label(self, anchor="w", padding=(8, 2))
         self.status.pack(fill="x")
-        self.start_monitor()
         self.after(40, self._loop)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        # Started from the Windows Startup folder: stay hidden until Longshot runs,
+        # then show up and start playing; hide again when Longshot closes.
+        self.wait_mode = setup_helpers.WAIT_FLAG in sys.argv
+        self._game_seen = False
+        if self.wait_mode:
+            self.withdraw()
+            self.after(500, self._watch_game)
+        else:
+            self.start_monitor()
+
+    def _watch_game(self):
+        running = game_running()
+        if running and not self._game_seen:
+            self._game_seen = True
+            if setup_helpers.other_instances():
+                pass    # another copy is already open -- don't add a second controller
+            else:
+                self.deiconify()
+                self.start_monitor()
+                self.goto("Play")
+                self.after(4000, self._auto_play)   # give Longshot a moment to load
+        elif not running and self._game_seen:
+            self._game_seen = False
+            if self.engine:
+                self.tabs["Play"]._toggle()
+            self.stop_monitor()
+            self.withdraw()
+        self.after(3000, self._watch_game)
+
+    def _auto_play(self):
+        if self._game_seen and not self.engine and config.note_freqs(self.cfg):
+            self.go_play()
 
     # ---- shared plumbing -------------------------------------------------
     def current_tab(self):
@@ -152,6 +184,9 @@ class App(tk.Tk):
                 self.ui_queue.get_nowait()()
             except queue.Empty:
                 break
+        if self.state() == "withdrawn":     # waiting for Longshot in the background
+            self.after(200, self._loop)
+            return
         tab = self.current_tab()
         if self.monitor and not self.monitor_paused:
             readings = self.monitor.drain()
@@ -273,6 +308,11 @@ class SetupTab(Tab):
         self.gs_lbl = ttk.Label(gs, foreground="#666")
         self.gs_lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
+        self.auto_on = tk.BooleanVar(value=setup_helpers.autostart_enabled())
+        ttk.Checkbutton(self, text="Start automatically when Longshot starts (runs hidden in the background "
+                                   "after you log in to Windows, then opens and starts playing)",
+                        variable=self.auto_on, command=self._auto_changed).pack(anchor="w", pady=(12, 0))
+
         chk = ttk.LabelFrame(self, text="Ready to play?", padding=10)
         chk.pack(fill="x", pady=(12, 0))
         self.ready_lbl = ttk.Label(chk, font=MID)
@@ -307,8 +347,10 @@ class SetupTab(Tab):
             st["ini"] = setup_helpers.find_ini(cfg.get("longshot_ini", ""))
             st["bindings"] = setup_helpers.bindings_ok(st["ini"]) if st["ini"] else False
             f = cfg["flag"]
-            st["flag"] = (GameFlag(f["address"], f["up_value"], f["down_value"]).read()
-                          if st["running"] and f["address"] else None)
+            st["flag"] = st["flag_auto"] = None
+            if st["running"]:
+                gf = GameFlag(f["address"], f["up_value"], f["down_value"])
+                st["flag"], st["flag_auto"] = gf.read(), gf.via_chains
             if time.monotonic() - self._last_proc_scan > 10:
                 self._last_proc_scan = time.monotonic()
                 st["others"] = setup_helpers.other_instances()
@@ -386,10 +428,11 @@ class SetupTab(Tab):
         elif not running:
             r["flag"].set(None, "Game flag: start Longshot to check it")
         elif st.get("flag") is None:
-            r["flag"].set(False, "Game flag isn't working (Longshot was restarted) -- using Scroll Lock until "
-                                 "it's found again", "Find flag", self.app.go_flag_scan)
+            r["flag"].set(False, "Game flag not found (a Longshot update may have moved it) -- using Scroll Lock "
+                                 "until it's found", "Find flag", self.app.go_flag_scan)
         else:
-            r["flag"].set(True, f"Game flag working -- ocarina is {'up' if st['flag'] else 'put away'}")
+            r["flag"].set(True, ("Game flag found automatically" if st.get("flag_auto") else "Game flag working")
+                          + f" -- ocarina is {'up' if st['flag'] else 'put away'}")
 
         self._render_play()
         ready = sum(1 for row in r.values() if row.ok)
@@ -426,6 +469,13 @@ class SetupTab(Tab):
         nf = self.app.cfg["match"]["noise_floor"]
         self.noise_lbl.config(text=f"background level: {nf:.4f}" if self.app.cfg.get("noise_measured")
                               else "not measured yet")
+
+    def _auto_changed(self):
+        try:
+            setup_helpers.set_autostart(self.auto_on.get())
+        except Exception as e:
+            self.auto_on.set(setup_helpers.autostart_enabled())
+            messagebox.showerror("Ocarina Translator", f"Couldn't change the startup setting: {e}")
 
     def _gs_changed(self):
         dev = self.gs_dev.get()
@@ -831,17 +881,20 @@ class FlagTab(Tab):
     def __init__(self, parent, app):
         super().__init__(parent, app)
         ttk.Label(self, wraplength=820, justify="left", text=(
-            "The translator reads a value in Longshot's memory to know when the ocarina is up. It moves every "
-            "time Longshot is relaunched -- if 'Value now' doesn't change when you take the ocarina out, run "
-            "the scan below (Longshot must be running; the first capture briefly uses a few GB of RAM).")
+            "The translator reads a value in Longshot's memory to know when the ocarina is up. It's found "
+            "automatically each time Longshot starts. Only if that stops working (e.g. after a Longshot update) "
+            "use 'Find it manually' below.")
         ).pack(anchor="w")
         cur = ttk.LabelFrame(self, text="Current flag", padding=8)
         cur.pack(fill="x", pady=8)
         self.cur_lbl = ttk.Label(cur, font=MID)
         self.cur_lbl.pack(anchor="w")
 
-        scan = ttk.LabelFrame(self, text="Find it again", padding=8)
-        scan.pack(fill="both", expand=True)
+        self.show_scan = ttk.Button(self, text="Find it manually…", command=self._show_scan)
+        self.show_scan.pack(anchor="w")
+        scan = ttk.LabelFrame(self, text="Find it manually (Longshot must be running; the first capture "
+                                          "briefly uses a few GB of RAM)", padding=8)
+        self.scan_frame = scan
         self.instr = ttk.Label(scan, font=MID, wraplength=800)
         self.instr.pack(anchor="w")
         row = ttk.Frame(scan)
@@ -864,6 +917,11 @@ class FlagTab(Tab):
         self.instr.config(text="With Longshot running and your save loaded, click Start scan. It takes 2-4 "
                                "rounds of putting the ocarina away and taking it out.")
         self._set_buttons(idle=True)
+
+    def _show_scan(self):
+        if not self.scan_frame.winfo_ismapped():
+            self.show_scan.pack_forget()
+            self.scan_frame.pack(fill="both", expand=True)
 
     def _set_buttons(self, idle=False, capture=False, verify=False, use=False):
         self.start_btn.state(["!disabled"] if idle else ["disabled"])
@@ -890,6 +948,7 @@ class FlagTab(Tab):
         self.app.ui_queue.put(lambda: self.result.config(text=msg))
 
     def _start(self):
+        self._show_scan()
         if not game_running():
             messagebox.showwarning("Ocarina Translator", "Start Longshot and load your save first.")
             return

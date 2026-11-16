@@ -154,3 +154,33 @@ def apply_bindings(path):
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write("\n".join(lines) + "\n")
     return backup
+
+
+# ---- start with Windows, wait for Longshot -------------------------------
+WAIT_FLAG = "--wait-for-longshot"
+STARTUP_LNK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup",
+                           "Ocarina Translator.lnk")
+
+
+def autostart_enabled():
+    return os.path.exists(STARTUP_LNK)
+
+
+def set_autostart(on):
+    """Add/remove a Startup-folder shortcut that runs this app in wait-for-Longshot mode."""
+    import sys
+    if not on:
+        if os.path.exists(STARTUP_LNK):
+            os.remove(STARTUP_LNK)
+        return
+    if getattr(sys, "frozen", False):
+        target, args, workdir = sys.executable, WAIT_FLAG, os.path.dirname(sys.executable)
+    else:
+        here = os.path.dirname(os.path.abspath(__file__))
+        pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        target, args, workdir = pyw, f'"{os.path.join(here, "app.py")}" {WAIT_FLAG}', here
+    q = lambda s: s.replace("'", "''")
+    ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{q(STARTUP_LNK)}');"
+          f"$s.TargetPath='{q(target)}';$s.Arguments='{q(args)}';$s.WorkingDirectory='{q(workdir)}';$s.Save()")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
