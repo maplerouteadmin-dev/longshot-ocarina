@@ -24,7 +24,7 @@ Your real controller keeps working alongside it.
 |---|---|
 | **PC** | Windows 10 or 11 |
 | **Game** | Longshot, run **windowed or borderless** (needed for the fingering pop-up) |
-| **Ocarina** | A 12-hole Alto C ocarina. Others work, but the fingering pictures assume a 12-hole Alto C. |
+| **Ocarina** | A 12-hole Alto C ocarina. We built and tested everything with this 3D-printed one: [Printables model #474058](https://www.printables.com/model/474058). Others work, but the fingering pictures assume a 12-hole Alto C. |
 | **Microphone** | Any mic; a headset or webcam mic is fine |
 | **Driver** | [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases), the free virtual controller driver. Install it once and reboot. |
 
