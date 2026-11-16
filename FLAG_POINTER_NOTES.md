@@ -1,22 +1,29 @@
 # Ocarina flag across Longshot restarts — status
 
-Stopped early: the 5-hour usage budget was already at 71% when this started.
+## Done
+- Scan fix (3d539db): Verify unlocks at <=300 candidates or after 3 rounds
+  (Longshot keeps ~42 copies of the flag, so the scan never got below 40).
+- `flag_probe.py`: shows the flag's allocation base, size and offset.
 
-Done:
-- `flag_probe.py` (Stage A): for the current flag address, prints its
-  allocation base, allocation size, offset in the allocation, and how many
-  allocations share that size.
+## Stage A result: fails
+| run | flag | alloc size | offset | same-size allocs |
+|---|---|---|---|---|
+| before restart | 0x1F30A2FEBA5 | 0x1000000 | 0x2FEBA5 | 57 (index 13) |
+| after restart  | 0x1F2C5A036C2 | 0x1000000 | 0xA036C2 | 57 (index 10) |
 
-Next steps:
-1. In the app, Game Flag tab -> Start scan -> "Use this flag".
-2. Run `python flag_probe.py` with Longshot running and note the three lines.
-3. Restart Longshot completely, scan again, run the probe again.
-4. If size and offset match and the size is unique (or near unique), have
-   `GameFlag` find the allocation by size and read base + offset (setting
-   `flag.locator = {"alloc_size": ..., "offset": ...}`), falling back to the
-   saved raw address.
-5. If they don't match, do Stage B: a pointer scan from a module-static
-   address (see the original brief).
+The flag sits in one of 57 16 MB heap blocks, at a different offset each time,
+and the bytes around it differ (only 1703 of 4096 bytes on its page match).
+The scan may also pick a different one of the ~42 copies each time.
 
-`flag.address` was assumed to be a hex string or int in `dist\config.json`;
-if that's wrong, pass the address as an argument instead.
+## Next: Stage B (pointer scan)
+- Reuse `memscan.list_writable_regions` / `snapshot` to read memory.
+- Build a sorted numpy array of 8-byte-aligned values that point into the
+  writable regions, with their locations.
+- Search back from the flag (and ideally from every surviving copy): depth
+  up to 4, offset up to 0x2000, ending at a static address in
+  longshot.exe or a DLL image (module + offset). Save the chains to disk.
+- After a restart and re-scan, keep only the chains that resolve to an
+  address whose value tracks the ocarina (any copy counts, not just the
+  saved one).
+- Then add `flag.locator` in `config.py` and resolve it in `GameFlag`,
+  falling back to the saved address, and show this on the Game Flag tab.
