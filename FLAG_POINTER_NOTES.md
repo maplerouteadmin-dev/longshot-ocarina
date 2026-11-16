@@ -1,29 +1,14 @@
-# Ocarina flag across Longshot restarts — status
+# Ocarina flag across Longshot restarts — solved
 
-## Done
-- Scan fix (3d539db): Verify unlocks at <=300 candidates or after 3 rounds
-  (Longshot keeps ~42 copies of the flag, so the scan never got below 40).
-- `flag_probe.py`: shows the flag's allocation base, size and offset.
-
-## Stage A result: fails
-| run | flag | alloc size | offset | same-size allocs |
-|---|---|---|---|---|
-| before restart | 0x1F30A2FEBA5 | 0x1000000 | 0x2FEBA5 | 57 (index 13) |
-| after restart  | 0x1F2C5A036C2 | 0x1000000 | 0xA036C2 | 57 (index 10) |
-
-The flag sits in one of 57 16 MB heap blocks, at a different offset each time,
-and the bytes around it differ (only 1703 of 4096 bytes on its page match).
-The scan may also pick a different one of the ~42 copies each time.
-
-## Next: Stage B (pointer scan)
-- Reuse `memscan.list_writable_regions` / `snapshot` to read memory.
-- Build a sorted numpy array of 8-byte-aligned values that point into the
-  writable regions, with their locations.
-- Search back from the flag (and ideally from every surviving copy): depth
-  up to 4, offset up to 0x2000, ending at a static address in
-  longshot.exe or a DLL image (module + offset). Save the chains to disk.
-- After a restart and re-scan, keep only the chains that resolve to an
-  address whose value tracks the ocarina (any copy counts, not just the
-  saved one).
-- Then add `flag.locator` in `config.py` and resolve it in `GameFlag`,
-  falling back to the saved address, and show this on the Game Flag tab.
+- The flag sits at a different heap offset each run (Stage A failed: the
+  offset changed from 0x2FEBA5 to 0xA036C2 inside one of 57 16 MB blocks).
+- `ptrscan.py` (depth 4, offsets up to 0x10000) found 199 chains rooted in
+  `longshot_vk.dll`. After a full restart, 196 still tracked the ocarina.
+- `flag_chains.py` keeps 16 of them. `GameFlag` follows all of them about
+  once a second and uses the address most of them agree on (byte 1 = up,
+  0 = put away). It falls back to the scanned address if none resolve.
+- If a Longshot update breaks the chains: scan the flag in the app, then run
+  `python ptrscan.py scan` (set PS_DEPTH=6 and PS_OFF=0x10000; ~4 min per
+  level). Restart Longshot, run `python ptrscan.py check 0` with the ocarina
+  put away and `python ptrscan.py check 1` with it out, then regenerate
+  `flag_chains.py` from `ptr_chains.json`.
