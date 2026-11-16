@@ -128,6 +128,30 @@ def bindings_ok(path):
     return all(cur == want and want is not None for cur, want in binding_status(path).values())
 
 
+def background_input_ok(path):
+    """Longshot only reads the controller while focused unless controller_in_background=1;
+    without it, notes are silently dropped after you click any other window."""
+    return _parse(path)[1].get("controller_in_background") == "1"
+
+
+def apply_background_input(path):
+    """Set controller_in_background=1 (Longshot must be closed). Returns the backup path."""
+    if game_running():
+        raise RuntimeError("Close Longshot first -- it overwrites this file when it exits.")
+    lines, _ = _parse(path)
+    backup = f"{path}.ocarina-backup-{time.strftime('%Y%m%d-%H%M%S')}"
+    shutil.copy2(path, backup)
+    for i, line in enumerate(lines):
+        if line.split("=", 1)[0].strip() == "controller_in_background":
+            lines[i] = "controller_in_background=1"
+            break
+    else:
+        lines.append("controller_in_background=1")
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write("\n".join(lines) + "\n")
+    return backup
+
+
 def apply_bindings(path):
     """Point each pad_note_* at the same pad index as its normal button.
 

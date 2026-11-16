@@ -31,7 +31,8 @@ MUTED = (150, 146, 136)
 ALPHA = 0.82
 POLL = 0.15
 FADE_IN, FADE_OUT = 7, 4                       # frames (~40 ms each)
-S = 2                                          # supersample for smooth edges
+S = 4                                          # supersample: smooth edges, crisp when scaled up
+MIN_SCALE, MAX_SCALE = 0.6, 2.0
 
 
 def _font(size, bold=False):
@@ -66,9 +67,9 @@ def _hole(d, cx, cy, r, covered):
         d.ellipse(box, outline=CREAM, width=2 * S)
 
 
-def render_panel(notes, profile):
+def render_panel(notes, profile, scale=1.0):
     """One image with a header and a row per note: chip, game name, pitch, fingering."""
-    row_h, width, top = 86, 340, 50
+    row_h, width, top = 96, 340, 50
     H = top + row_h * len(notes) + 12
     img = Image.new("RGB", (width * S, H * S), KEY)
     d = ImageDraw.Draw(img)
@@ -84,12 +85,12 @@ def render_panel(notes, profile):
     d.line([22 * S, ly, cx - tw / 2 - 12 * S, ly], fill=GOLD, width=S)
     d.line([cx + tw / 2 + 12 * S, ly, width * S - 22 * S, ly], fill=GOLD, width=S)
 
-    name_f, pitch_f, tiny = _font(14, bold=True), _font(12), _font(10)
+    name_f, pitch_f, tiny, hand_f = _font(14, bold=True), _font(12), _font(10), _font(10, bold=True)
     for i, n in enumerate(notes):
         y0 = (top + i * row_h) * S
         if i:
             d.line([22 * S, y0 - 4 * S, width * S - 22 * S, y0 - 4 * S], fill=(48, 47, 44), width=S)
-        cy = y0 + (row_h - 8) * S / 2
+        cy = y0 + (row_h / 2 + 4) * S
         _chip(d, 20 * S, cy - 13 * S, n["button"])
         d.text((76 * S, cy - 20 * S), n["label"], fill=CREAM, font=name_f)
         d.text((76 * S, cy + 2 * S), n["pitch"], fill=MUTED, font=pitch_f)
@@ -107,7 +108,13 @@ def render_panel(notes, profile):
         _hole(d, tx + gx, cy - 6 * S, r, "TR" in covered)
         tb = d.textbbox((0, 0), "thumbs", font=tiny)
         d.text((tx + gx / 2 - (tb[2] - tb[0]) / 2, cy + 6 * S), "thumbs", fill=MUTED, font=tiny)
-    return img.resize((width, H), Image.LANCZOS)
+        # L / R above each column (left/right hand), and above each thumb hole
+        for x, top_y in ((fx, fy), (fx + gx, fy), (tx, cy - 6 * S), (tx + gx, cy - 6 * S)):
+            t = "L" if x in (fx, tx) else "R"
+            lb = d.textbbox((0, 0), t, font=hand_f)
+            d.text((x - (lb[2] - lb[0]) / 2 - lb[0], top_y - r - 4 * S - (lb[3] - lb[1]) - lb[1]), t,
+                   fill=GOLD, font=hand_f)
+    return img.resize((max(1, int(width * scale)), max(1, int(H * scale))), Image.LANCZOS)
 
 
 # ---- Longshot's window ------------------------------------------------------
@@ -153,6 +160,7 @@ class FingeringOverlay:
         self._thread = None
         self._drag = None
         self._built_for = None
+        self.on_scale = None       # callback so the Play tab slider follows wheel resizing
 
     @property
     def cfg(self):
@@ -170,6 +178,19 @@ class FingeringOverlay:
 
     def refresh(self):
         self._built_for = None
+
+    def scale(self):
+        return min(MAX_SCALE, max(MIN_SCALE, float(self.cfg.get("scale") or 1.0)))
+
+    def set_scale(self, s, save=True):
+        self.cfg["scale"] = round(min(MAX_SCALE, max(MIN_SCALE, s)), 2)
+        if save:
+            self.app.save()
+        if self.on_scale:
+            self.on_scale(self.cfg["scale"])
+
+    def _wheel(self, e):
+        self.set_scale(self.scale() + (0.1 if e.delta > 0 else -0.1))
 
     # -- background polling: flag state + game window position --------------
     def start(self):
@@ -214,6 +235,7 @@ class FingeringOverlay:
             w.bind("<ButtonPress-1>", self._drag_start)
             w.bind("<B1-Motion>", self._drag_move)
             w.bind("<ButtonRelease-1>", self._drag_end)
+            w.bind("<MouseWheel>", self._wheel)
         self.win.update_idletasks()
         try:   # never take focus from the game; stay out of the taskbar and alt-tab
             hwnd = _u32.GetParent(self.win.winfo_id()) or self.win.winfo_id()
@@ -224,13 +246,17 @@ class FingeringOverlay:
 
     def _build(self):
         notes = self.pending_notes()
-        key = tuple(d["button"] for d in notes)
+        key = (tuple(d["button"] for d in notes), self.scale())
         if self._built_for == key:
             return
         self._ensure_window()
-        self.photo = ImageTk.PhotoImage(render_panel(notes, self.app.cfg.get("ocarina", "12-hole Alto C")))
+        self.photo = ImageTk.PhotoImage(render_panel(notes, self.app.cfg.get("ocarina", "12-hole Alto C"),
+                                                     self.scale()))
         self.label.config(image=self.photo)
+        resized = self._built_for is not None and self._built_for[1] != key[1]
         self._built_for = key
+        if resized and self._shown:
+            self._place()
 
     def _place(self):
         """Position relative to the game window (default: left of Link, vertically centred)."""

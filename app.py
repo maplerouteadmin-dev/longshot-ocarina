@@ -324,7 +324,7 @@ class SetupTab(Tab):
         self.ready_lbl = ttk.Label(chk, font=MID)
         self.ready_lbl.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
         self.rows = {}
-        for i, key in enumerate(["driver", "bindings", "game", "dupes", "noise", "notes", "flag", "play"]):
+        for i, key in enumerate(["driver", "bindings", "background", "game", "dupes", "noise", "notes", "flag", "play"]):
             self.rows[key] = CheckRow(chk, i + 1)
         chk.columnconfigure(0, weight=1)
         self._state = {}
@@ -352,6 +352,7 @@ class SetupTab(Tab):
                 st["exe"] = setup_helpers._running_exe_path()
             st["ini"] = setup_helpers.find_ini(cfg.get("longshot_ini", ""))
             st["bindings"] = setup_helpers.bindings_ok(st["ini"]) if st["ini"] else False
+            st["background"] = setup_helpers.background_input_ok(st["ini"]) if st["ini"] else False
             f = cfg["flag"]
             st["flag"] = st["flag_auto"] = None
             if st["running"]:
@@ -397,6 +398,14 @@ class SetupTab(Tab):
                               (" -- close Longshot first" if running else ""), "Apply bindings", self._apply)
         else:
             r["bindings"].set(True, "Ocarina notes are bound to the controller in Longshot")
+
+        if not st.get("ini"):
+            r["background"].set(None, "Background controller input: needs Longshot's settings file")
+        elif not st.get("background"):
+            r["background"].set(False, "Notes only reach Longshot while its window is focused" +
+                                (" -- close Longshot first" if running else ""), "Fix", self._apply_background)
+        else:
+            r["background"].set(True, "Notes reach Longshot even when another window is focused")
 
         if running:
             r["game"].set(True, "Longshot is running")
@@ -536,6 +545,15 @@ class SetupTab(Tab):
             self.app.cfg["longshot_ini"] = p
             self.app.save()
             self.refresh()
+
+    def _apply_background(self):
+        try:
+            backup = setup_helpers.apply_background_input(self.app.cfg["longshot_ini"])
+            messagebox.showinfo("Ocarina Translator", "Longshot will now take controller input even when "
+                                                      f"it isn't the focused window.\n\nBackup saved:\n{backup}")
+        except Exception as e:
+            messagebox.showerror("Ocarina Translator", str(e))
+        self.refresh()
 
     def _apply(self):
         try:
@@ -816,6 +834,16 @@ class PlayTab(Tab):
         ttk.Checkbutton(pop, text="Show note fingerings over the game while the ocarina is up "
                                   "(drag it to move it; Longshot must be windowed or borderless)",
                         variable=self.pop_on, command=self._pop_changed).pack(anchor="w")
+        size = ttk.Frame(pop)
+        size.pack(anchor="w", pady=(4, 0))
+        ttk.Label(size, text="Size:").pack(side="left")
+        self.pop_size = tk.DoubleVar(value=app.overlay.scale())
+        slider = ttk.Scale(size, from_=0.6, to=2.0, length=220, variable=self.pop_size,
+                           command=lambda v: app.overlay.set_scale(float(v), save=False))
+        slider.pack(side="left", padx=6)
+        slider.bind("<ButtonRelease-1>", lambda e: app.save())
+        ttk.Label(size, text="(or scroll the mouse wheel over the pop-up)", foreground="#666").pack(side="left")
+        app.overlay.on_scale = lambda s: self.pop_size.set(s)
         row = ttk.Frame(pop)
         row.pack(anchor="w", pady=(4, 0))
         ttk.Label(row, text="Learned (hide):").pack(side="left")
