@@ -10,6 +10,10 @@ Three things keep it both fast and free of stray presses:
   steadiness timer, so the breath attack itself can't confirm a note.
 * Sticky held notes: once a note is held it keeps counting slightly past its
   boundary, so a wobble mid-breath doesn't flip to the neighbouring note.
+* Game-sound rejection: readings flagged as echo (the game was playing that
+  pitch -- music, or Link playing your note back) can't start a note. A held
+  note is released once the mic level drops well below its peak, so the
+  game's quieter echo from the TV can't keep it held in a feedback loop.
 
 Each note's acceptance window is half the distance to its nearest calibrated
 neighbour (capped), so adding notes automatically tightens the windows instead
@@ -36,6 +40,12 @@ class MatchParams:
     attack_lookback: float = 0.015
     release_seconds: float = 0.060  # silence/off-note time before releasing a held note
     sticky_cents: float = 18       # extra tolerance for the note currently held
+    release_level_ratio: float = 0.30  # held note counts as "still playing" only while at least
+                                       # this fraction of its peak loudness -- so when you stop
+                                       # blowing it releases even if the game echoes the same pitch
+    echo_override: float = 3.0     # a pitch the game is also playing can only start a note if
+                                   # this many times louder than the normal threshold
+    max_hold_seconds: float = 4.0  # safety cap so a note can never get stuck held
 
 
 @dataclass
@@ -56,6 +66,7 @@ class Decision:
     offset_cents: float | None = None
     candidate: str | None = None
     held: str | None = None
+    echo: bool = False   # this reading was ignored as game sound
     events: list = field(default_factory=list)  # [("press", key) | ("release", key)]
 
 
@@ -69,6 +80,9 @@ class NoteMatcher:
         self._run_start = 0.0
         self._run_lo = self._run_hi = 0.0
         self._last_held_seen = 0.0
+        self._held_since = 0.0
+        self._held_peak = 0.0
+        self._blocked_key = None   # note released by the safety cap; can't re-fire until a quiet moment
         self._levels = deque()
 
     def set_notes(self, notes: dict):
@@ -120,14 +134,25 @@ class NoteMatcher:
         d.nearest, d.offset_cents = key, off
         match = key if (voiced and inside) else None
         attacking = voiced and self._attacking(t, level)
+        echo_blocked = getattr(reading, "echo", False) and level < self.gate_level() * p.echo_override
+        d.echo = echo_blocked
+        if not voiced:
+            self._blocked_key = None
 
         if match is not None and self.held == match:
-            self._last_held_seen = t
+            self._held_peak = max(self._held_peak, level)
+            if level >= self._held_peak * p.release_level_ratio:
+                self._last_held_seen = t
 
-        # steadiness run
+        # steadiness run -- game sounds and a capped note can't start one
+        new_match = match
+        if match is not None and match != self.held and (echo_blocked or match == self._blocked_key):
+            new_match = None
         c = pitch.cents(freq) if voiced else None
-        if match is None:
+        if new_match is None:
             self._run_key = None
+        elif new_match != self._run_key or attacking:
+            self._run_key, self._run_start, self._run_lo, self._run_hi = new_match, t, c, c
         elif match != self._run_key or attacking:
             self._run_key, self._run_start, self._run_lo, self._run_hi = match, t, c, c
         else:
@@ -145,10 +170,15 @@ class NoteMatcher:
             if self.held is not None:
                 d.events.append(("release", self.held))
             self.held = self._run_key
-            self._last_held_seen = t
+            self._last_held_seen = self._held_since = t
+            self._held_peak = level
             d.events.append(("press", self.held))
         elif self.held is not None and t - self._last_held_seen >= p.release_seconds:
             d.events.append(("release", self.held))
+            self.held = None
+        elif self.held is not None and t - self._held_since >= p.max_hold_seconds:
+            d.events.append(("release", self.held))
+            self._blocked_key = self.held
             self.held = None
 
         d.held = self.held
@@ -158,5 +188,6 @@ class NoteMatcher:
         events = [("release", self.held)] if self.held else []
         self.held = None
         self._run_key = None
+        self._blocked_key = None
         self._levels.clear()
         return events

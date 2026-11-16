@@ -25,6 +25,7 @@ import audio
 import calibration
 import config
 import diagram
+import echo
 import fingering
 import pitch
 import setup_helpers
@@ -48,6 +49,7 @@ class App(tk.Tk):
         self.ui_queue = queue.Queue()
         self.monitor = None
         self.monitor_paused = False
+        self.game_audio = None
         self.engine = None
         self._busy = False
 
@@ -106,11 +108,24 @@ class App(tk.Tk):
         except Exception as e:
             self.monitor = None
             self.set_status(f"Couldn't open mic '{name}': {e}")
+        self.start_game_audio()
+
+    def start_game_audio(self):
+        if self.game_audio:
+            self.game_audio.stop()
+            self.game_audio = None
+        gsf = self.cfg["game_sound_filter"]
+        if gsf["enabled"] and not self.engine:
+            self.game_audio = echo.GameAudio(gsf["device"])
+            self.game_audio.start()
 
     def stop_monitor(self):
         if self.monitor:
             self.monitor.stop()
             self.monitor = None
+        if self.game_audio:
+            self.game_audio.stop()
+            self.game_audio = None
 
     def _loop(self):
         while True:
@@ -198,6 +213,22 @@ class SetupTab(Tab):
         self.noise_lbl = ttk.Label(row, text="")
         self.noise_lbl.pack(side="left", padx=8)
 
+        gs = ttk.LabelFrame(self, text="Game sounds", padding=10)
+        gs.pack(fill="x", pady=(12, 0))
+        gsf = app.cfg["game_sound_filter"]
+        self.gs_on = tk.BooleanVar(value=gsf["enabled"])
+        ttk.Checkbutton(gs, text="Ignore notes the game itself is playing (music, Link playing your note back) "
+                                 "-- needed when the mic can hear the TV/speakers",
+                        variable=self.gs_on, command=self._gs_changed).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(gs, text="Game audio comes out of:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.default_out = "Windows default output"
+        self.gs_dev = ttk.Combobox(gs, values=[self.default_out] + echo.output_devices(), state="readonly", width=46)
+        self.gs_dev.set(gsf["device"] or self.default_out)
+        self.gs_dev.bind("<<ComboboxSelected>>", lambda e: self._gs_changed())
+        self.gs_dev.grid(row=1, column=1, sticky="w", padx=6, pady=(6, 0))
+        self.gs_lbl = ttk.Label(gs, foreground="#666")
+        self.gs_lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
         chk = ttk.LabelFrame(self, text="Checks", padding=10)
         chk.pack(fill="x", pady=(12, 0))
         self.vigem_lbl = ttk.Label(chk)
@@ -240,6 +271,24 @@ class SetupTab(Tab):
         self.game_lbl.config(text="Longshot is running" if running else "Longshot is not running")
         nf = self.app.cfg["match"]["noise_floor"]
         self.noise_lbl.config(text=f"background level: {nf:.4f}")
+
+    def _gs_changed(self):
+        dev = self.gs_dev.get()
+        self.app.cfg["game_sound_filter"] = {"enabled": self.gs_on.get(),
+                                             "device": "" if dev == self.default_out else dev}
+        self.app.save()
+        self.app.start_game_audio()
+
+    def tick(self):
+        ga = self.app.game_audio
+        if not self.gs_on.get():
+            self.gs_lbl.config(text="Off -- fine with headphones.")
+        elif ga is None or ga.error:
+            self.gs_lbl.config(text=(ga.error if ga else "not running"), foreground="#b00")
+        else:
+            dom = ga.dominant()
+            self.gs_lbl.config(foreground="#666", text=f"Listening to {ga.device_name}: "
+                               + (f"game is playing ~{dom:.0f} Hz" if dom else "game is quiet"))
 
     def _mic_changed(self, _e=None):
         self.app.cfg["mic_name"] = self.mic.get()
@@ -479,6 +528,8 @@ class TestTab(Tab):
     def on_readings(self, readings):
         if not self.matcher:
             self.on_show()
+        if self.app.game_audio:
+            self.app.game_audio.annotate(readings, self.matcher.gate_level())
         last = None
         for r in readings:
             d = self.matcher.update(r)
@@ -499,7 +550,8 @@ class TestTab(Tab):
         if last:
             self.hz.config(text=f"{last.freq:.1f} Hz" if last.voiced else "--")
             if last.voiced and last.nearest:
-                self.near.config(text=f"nearest {last.nearest}  {last.offset_cents:+.0f}¢")
+                self.near.config(text=f"nearest {last.nearest}  {last.offset_cents:+.0f}¢" +
+                                      ("   (game sound -- ignored)" if last.echo else ""))
                 x = 200 + max(-190, min(190, last.offset_cents * 2))
                 self.cents.delete("all")
                 self.cents.create_line(200, 0, 200, 24, fill="#999")
@@ -752,6 +804,9 @@ class AdvancedTab(Tab):
         ("match", "sticky_cents", "Held-note stickiness (cents)", 1, 0, 60),
         ("match", "level_margin", "Loudness needed (× background)", 1, 1.5, 10),
         ("match", "min_conf", "Tone clarity needed (0-1)", 1, 0.5, 0.99),
+        ("match", "release_level_ratio", "Release when breath drops below (× its peak)", 1, 0.05, 0.9),
+        ("match", "echo_override", "Game-sound pitch still counts if louder than (× threshold)", 1, 1, 20),
+        ("match", "max_hold_seconds", "Longest a note can be held (s)", 1, 1, 15),
     ]
 
     def __init__(self, parent, app):

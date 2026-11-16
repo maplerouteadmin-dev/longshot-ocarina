@@ -47,6 +47,9 @@ DEFAULTS = {
     "flag_grace_seconds": 0.40,
     "flag": {"address": None, "up_value": 0, "down_value": 1},
     "longshot_ini": "",
+    # ignore pitches the game itself is playing (music, Link's note playback)
+    # when the mic can hear the TV/speakers. device "" = Windows default output.
+    "game_sound_filter": {"enabled": True, "device": ""},
 }
 
 

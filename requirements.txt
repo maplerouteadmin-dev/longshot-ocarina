@@ -1,0 +1,7 @@
+numpy
+sounddevice
+soundcard
+vgamepad
+pymem
+pillow
+pyinstaller

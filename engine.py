@@ -12,6 +12,7 @@ import time
 
 import audio
 import config
+import echo
 import gamepad
 from keys import VK_SCROLL, is_toggled
 from matcher import NoteMatcher
@@ -91,6 +92,11 @@ class Engine:
         self.matcher = NoteMatcher(config.note_freqs(self.cfg), config.match_params(self.cfg))
         self.flag = GameFlag(**self.cfg["flag"])
         self.out = OutputScheduler(self.cfg["min_hold_seconds"], self.cfg["switch_gap_seconds"])
+        self.game_audio = None
+        gsf = self.cfg["game_sound_filter"]
+        if gsf["enabled"]:
+            self.game_audio = echo.GameAudio(gsf["device"])
+            self.game_audio.start()
         if self.inject:
             gamepad.connect()
         self.analyzer.start()
@@ -103,6 +109,8 @@ class Engine:
         if self._thread:
             self._thread.join(timeout=2)
         self.analyzer.stop()
+        if self.game_audio:
+            self.game_audio.stop()
         if self.inject:
             self.out.shutdown()
             gamepad.disconnect()
@@ -165,6 +173,8 @@ class Engine:
             readings = self.analyzer.drain() if listening else []
             if not listening:
                 self.analyzer.drain()
+            if readings and self.game_audio:
+                self.game_audio.annotate(readings, self.matcher.gate_level())
             for r in readings:
                 d = self.matcher.update(r, allow_new=allow_new)
                 for kind, key in d.events:

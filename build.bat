@@ -4,6 +4,7 @@ cd /d "%~dp0"
 python -m PyInstaller --noconfirm --onefile --windowed --name OcarinaTranslator ^
   --collect-all vgamepad ^
   --collect-all sounddevice ^
+  --collect-all soundcard ^
   --exclude-module scipy --exclude-module matplotlib --exclude-module pandas ^
   app.py
 echo.

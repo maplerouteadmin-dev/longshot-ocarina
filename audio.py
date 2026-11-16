@@ -66,6 +66,7 @@ class Reading:
     freq: float       # Hz, or None when no clear tone
     conf: float       # YIN confidence 0..1
     level: float      # RMS of the window
+    echo: bool = False  # the game was playing this pitch too (set by echo.GameAudio)
 
 
 class Analyzer:

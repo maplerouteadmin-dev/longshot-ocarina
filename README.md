@@ -36,6 +36,23 @@ Needs the free **ViGEmBus** driver (the Setup tab checks for it and links to it)
 - **Scroll Lock**: while the Scroll Lock light is on.
 - **Always**: for testing only — stray sounds can move your character.
 
+## Playing on TV speakers (no headphones)
+
+Turn on **Setup → Game sounds**. The app then listens to what the PC sends to
+your speakers or TV and ignores any pitch the game is playing at that moment.
+That covers background music and Link playing your note back right after the
+game registers it. Without this, each note gets picked up twice: once from you
+and once from Link's playback.
+
+- Pick the output the game plays through (e.g. *TV (NVIDIA High Definition
+  Audio)*), or leave it on *Windows default output* if that's already the TV.
+- Measure background noise with the game running at your normal volume.
+- A held note releases when your breath drops below 30% of its peak, so the
+  quieter echo from the TV can't keep it held. No note can stay held for more
+  than 4 seconds. Both are adjustable on the Advanced tab.
+- This only works when the game's sound goes out through this PC, e.g. HDMI
+  to the TV. It can't hear audio that reaches the TV some other way.
+
 ## How detection works
 
 - **YIN pitch detection** on overlapping ~21ms windows, a reading every ~5ms.
