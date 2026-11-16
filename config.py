@@ -52,6 +52,8 @@ DEFAULTS = {
     # ignore pitches the game itself is playing (music, Link's note playback)
     # when the mic can hear the TV/speakers. device "" = Windows default output.
     "game_sound_filter": {"enabled": True, "device": ""},
+    # fingering pop-up over the game while the ocarina is up; learned = buttons to hide
+    "overlay": {"enabled": False, "learned": [], "x": None, "y": None},
 }
 
 

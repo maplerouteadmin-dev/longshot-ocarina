@@ -34,6 +34,7 @@ from engine import Engine
 from flag_scan import FlagScanner
 from matcher import MatchParams, NoteMatcher
 from ocarina_flag import GameFlag, game_running
+from overlay import FingeringOverlay
 
 BIG = ("Segoe UI", 28, "bold")
 MID = ("Segoe UI", 14)
@@ -54,6 +55,7 @@ class App(tk.Tk):
         self.game_audio = None
         self.engine = None
         self._busy = False
+        self.overlay = FingeringOverlay(self)
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True)
@@ -68,6 +70,8 @@ class App(tk.Tk):
 
         self.status = ttk.Label(self, anchor="w", padding=(8, 2))
         self.status.pack(fill="x")
+        if self.overlay.cfg.get("enabled"):
+            self.overlay.start()
         self.after(40, self._loop)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         # Started from the Windows Startup folder: stay hidden until Longshot runs,
@@ -184,6 +188,7 @@ class App(tk.Tk):
                 self.ui_queue.get_nowait()()
             except queue.Empty:
                 break
+        self.overlay.tick()
         if self.state() == "withdrawn":     # waiting for Longshot in the background
             self.after(200, self._loop)
             return
@@ -196,6 +201,7 @@ class App(tk.Tk):
         self.after(40, self._loop)
 
     def on_close(self):
+        self.overlay.stop()
         if self.engine:
             self.engine.stop()
         self.stop_monitor()
@@ -802,6 +808,25 @@ class PlayTab(Tab):
                             ("always", "Always (testing only -- sounds can move your character)")]:
             ttk.Radiobutton(mode, text=text, value=value, variable=self.mode,
                             command=self._mode_changed).pack(anchor="w")
+
+        pop = ttk.LabelFrame(self, text="Fingering pop-up (for learning)", padding=8)
+        pop.pack(fill="x", pady=(8, 0))
+        ov = app.overlay.cfg
+        self.pop_on = tk.BooleanVar(value=ov.get("enabled", False))
+        ttk.Checkbutton(pop, text="Show note fingerings over the game while the ocarina is up "
+                                  "(drag it to move it; Longshot must be windowed or borderless)",
+                        variable=self.pop_on, command=self._pop_changed).pack(anchor="w")
+        row = ttk.Frame(pop)
+        row.pack(anchor="w", pady=(4, 0))
+        ttk.Label(row, text="Learned (hide):").pack(side="left")
+        learned = set(ov.get("learned", []))
+        self.learned = {}
+        for d in config.NOTE_DEFS:
+            var = tk.BooleanVar(value=d["button"] in learned)
+            self.learned[d["button"]] = var
+            ttk.Checkbutton(row, text=f"{d['label']} ({d['pitch']})", variable=var,
+                            command=self._learned_changed).pack(side="left", padx=(8, 0))
+
         self.btn = ttk.Button(self, text="Start", command=self._toggle)
         self.btn.pack(pady=10)
         self.gate = ttk.Label(self, text="stopped", font=MID)
@@ -810,6 +835,14 @@ class PlayTab(Tab):
         self.held.pack(pady=6)
         self.log = tk.Text(self, height=10, state="disabled")
         self.log.pack(fill="both", expand=True)
+
+    def _pop_changed(self):
+        self.app.overlay.set_enabled(self.pop_on.get())
+
+    def _learned_changed(self):
+        self.app.overlay.cfg["learned"] = [b for b, v in self.learned.items() if v.get()]
+        self.app.save()
+        self.app.overlay.refresh()
 
     def _mode_changed(self):
         self.app.cfg["gate_mode"] = self.mode.get()
