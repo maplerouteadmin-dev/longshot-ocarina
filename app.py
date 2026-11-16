@@ -908,14 +908,16 @@ class FlagTab(Tab):
         def done(_):
             self.step += 1
             n = self.scanner.count()
-            if state == "up" and n is not None and n <= 40:
-                self.instr.config(text="Down to a few candidates. Hold the ocarina UP and PLAY a few notes, "
-                                       "then click Verify while playing.")
-                self._set_buttons(capture=True, verify=True)
-            elif state == "up" and n == 0:
+            if state == "up" and n == 0:
                 self.instr.config(text="Nothing matched -- the ocarina may have been in the wrong state. Start again.")
                 self.scanner = None
                 self._set_buttons(idle=True)
+            elif state == "up" and n is not None and (n <= 300 or self.step >= 6):
+                # Longshot keeps several copies of the flag, so the count can plateau (e.g. at 42);
+                # the verify step picks the steadiest one, so don't wait for a tiny number.
+                self.instr.config(text=f"{n} candidates left. Hold the ocarina UP and PLAY a few notes, then "
+                                       "click Verify while playing (or Capture again to narrow it further).")
+                self._set_buttons(capture=True, verify=True)
             else:
                 self.instr.config(text=self.STEPS[self.step % 2][1])
                 self._set_buttons(capture=True)
