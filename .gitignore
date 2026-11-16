@@ -6,3 +6,4 @@ dist/
 config.json
 ptr_chains*.json
 arena_state/
+longshot_options.ini*
