@@ -880,9 +880,10 @@ class FlagTab(Tab):
             return
         self._last_poll = time.monotonic()
         up = self.flag.read()
-        addr = self.app.cfg["flag"]["address"]
+        addr = self.flag.current_address()
+        how = "found automatically" if self.flag.via_chains else "from last scan"
         state = {True: "ocarina UP", False: "put away", None: "can't read (stale address or game closed)"}[up]
-        self.cur_lbl.config(text=f"Address {hex(addr) if addr else '(none)'}   Value now: "
+        self.cur_lbl.config(text=f"Address {hex(addr) if addr else '(none)'} ({how})   Value now: "
                                  f"{self.flag.last_raw if self.flag.last_raw is not None else '--'}  → {state}")
 
     def _progress(self, msg):
