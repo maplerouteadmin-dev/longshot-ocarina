@@ -842,7 +842,7 @@ class PlayTab(Tab):
                            command=lambda v: app.overlay.set_scale(float(v), save=False))
         slider.pack(side="left", padx=6)
         slider.bind("<ButtonRelease-1>", lambda e: app.save())
-        ttk.Label(size, text="(or scroll the mouse wheel over the pop-up)", foreground="#666").pack(side="left")
+        ttk.Label(size, text="(or drag the pop-up's bottom-right corner)", foreground="#666").pack(side="left")
         app.overlay.on_scale = lambda s: self.pop_size.set(s)
         row = ttk.Frame(pop)
         row.pack(anchor="w", pady=(4, 0))

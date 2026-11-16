@@ -114,6 +114,10 @@ def render_panel(notes, profile, scale=1.0):
             lb = d.textbbox((0, 0), t, font=hand_f)
             d.text((x - (lb[2] - lb[0]) / 2 - lb[0], top_y - r - 4 * S - (lb[3] - lb[1]) - lb[1]), t,
                    fill=GOLD, font=hand_f)
+    # resize grip in the bottom-right corner: three short gold diagonals
+    for k in (6, 11, 16):
+        d.line([width * S - (5 + k) * S, H * S - 5 * S, width * S - 5 * S, H * S - (5 + k) * S],
+               fill=GOLD, width=S)
     return img.resize((max(1, int(width * scale)), max(1, int(H * scale))), Image.LANCZOS)
 
 
@@ -189,8 +193,10 @@ class FingeringOverlay:
         if self.on_scale:
             self.on_scale(self.cfg["scale"])
 
-    def _wheel(self, e):
-        self.set_scale(self.scale() + (0.1 if e.delta > 0 else -0.1))
+    def _in_grip(self, e):
+        w, h = self.win.winfo_width(), self.win.winfo_height()
+        g = 22 * self.scale()
+        return e.x >= w - g and e.y >= h - g
 
     # -- background polling: flag state + game window position --------------
     def start(self):
@@ -235,7 +241,8 @@ class FingeringOverlay:
             w.bind("<ButtonPress-1>", self._drag_start)
             w.bind("<B1-Motion>", self._drag_move)
             w.bind("<ButtonRelease-1>", self._drag_end)
-            w.bind("<MouseWheel>", self._wheel)
+            w.bind("<Motion>", lambda e: self.label.config(
+                cursor="size_nw_se" if self._in_grip(e) else "fleur"))
         self.win.update_idletasks()
         try:   # never take focus from the game; stay out of the taskbar and alt-tab
             hwnd = _u32.GetParent(self.win.winfo_id()) or self.win.winfo_id()
@@ -273,13 +280,32 @@ class FingeringOverlay:
         self._placed_for = r
 
     def _drag_start(self, e):
-        self._drag = (e.x_root - self.win.winfo_x(), e.y_root - self.win.winfo_y())
+        if self._in_grip(e):   # corner grip: resize, keeping the top-left corner where it is
+            self._resize = None
+            self._drag = None
+            self._drag_end(None)          # pin the current top-left so resizing doesn't re-centre it
+            self._resize = (e.x_root, self.win.winfo_width(), self.scale())
+        else:
+            self._resize = None
+            self._drag = (e.x_root - self.win.winfo_x(), e.y_root - self.win.winfo_y())
 
     def _drag_move(self, e):
-        if self._drag:
+        if getattr(self, "_resize", None):
+            x0, w0, s0 = self._resize
+            s = s0 * max(1, w0 + e.x_root - x0) / max(1, w0)
+            now = time.monotonic()
+            if abs(s - self.scale()) >= 0.02 and now - getattr(self, "_last_resize", 0) > 0.05:
+                self._last_resize = now
+                self.set_scale(s, save=False)
+                self._build()
+        elif self._drag:
             self.win.geometry(f"+{e.x_root - self._drag[0]}+{e.y_root - self._drag[1]}")
 
     def _drag_end(self, _e):
+        if getattr(self, "_resize", None):
+            self._resize = None
+            self.app.save()
+            return
         self._drag = None
         r = self._rect or (0, 0, self.win.winfo_screenwidth(), self.win.winfo_screenheight())
         gw, gh = max(1, r[2] - r[0]), max(1, r[3] - r[1])
