@@ -15,10 +15,69 @@ VIGEM_URL = "https://github.com/nefarius/ViGEmBus/releases"
 def vigem_installed():
     try:
         out = subprocess.run(["sc", "query", "ViGEmBus"], capture_output=True, text=True,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+                             creationflags=NO_WINDOW).stdout
     except Exception:
         return False
     return "RUNNING" in out
+
+
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def launcher_path():
+    p = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "LongshotLauncher", "LongshotLauncher.exe")
+    return p if os.path.exists(p) else None
+
+
+def can_start_longshot(cfg):
+    return bool(launcher_path() or (cfg.get("longshot_exe") and os.path.exists(cfg["longshot_exe"])))
+
+
+def start_longshot(cfg):
+    """Start the game the way the desktop shortcut does (launcher --play), or
+    the game exe seen running before if the launcher isn't installed."""
+    launcher = launcher_path()
+    if launcher:
+        subprocess.Popen([launcher, "--play"], cwd=os.path.dirname(launcher))
+    elif cfg.get("longshot_exe") and os.path.exists(cfg["longshot_exe"]):
+        subprocess.Popen([cfg["longshot_exe"]], cwd=os.path.dirname(cfg["longshot_exe"]))
+    else:
+        raise RuntimeError("Couldn't find Longshot or its launcher -- start it yourself once and the app "
+                           "will remember where it is.")
+
+
+def other_instances():
+    """Other copies of this translator that are running -- each one holds its
+    own virtual controller, which can make Longshot ignore this one's presses.
+    Returns [(pid, description)]."""
+    me = {os.getpid(), os.getppid()}
+    ps = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'python.exe','pythonw.exe',"
+          "'OcarinaTranslator.exe' } | ForEach-Object { \"$($_.ProcessId)|$($_.ParentProcessId)|$($_.Name)|"
+          "$($_.CommandLine)\" }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                             timeout=10, creationflags=NO_WINDOW).stdout
+    except Exception:
+        return []
+    found = []
+    for line in out.splitlines():
+        parts = line.split("|", 3)
+        if len(parts) < 4:
+            continue
+        pid, ppid, name, cmd = int(parts[0]), int(parts[1]), parts[2], parts[3]
+        if pid in me or ppid in me:
+            continue
+        low = cmd.lower()
+        if name.lower() == "ocarinatranslator.exe":
+            found.append((pid, "OcarinaTranslator.exe"))
+        elif "translator.py" in low or "ocarinatranslator\\app.py" in low or "flag_scan" in low:
+            found.append((pid, f"python {cmd.split('python.exe')[-1].strip(' \"')}"))
+    return found
+
+
+def close_instances(pids):
+    for pid in pids:
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
 
 
 def _running_exe_path():

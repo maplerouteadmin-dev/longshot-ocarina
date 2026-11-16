@@ -44,8 +44,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Ocarina Translator")
-        self.geometry("900x640")
-        self.minsize(820, 580)
+        self.geometry("920x860")
+        self.minsize(840, 760)
         self.cfg = config.load()
         self.ui_queue = queue.Queue()
         self.monitor = None
@@ -74,6 +74,24 @@ class App(tk.Tk):
     # ---- shared plumbing -------------------------------------------------
     def current_tab(self):
         return self.tabs[self.nb.tab(self.nb.select(), "text")]
+
+    def goto(self, name):
+        self.nb.select(list(self.tabs).index(name))
+
+    def go_calibrate(self, button):
+        self.goto("Calibrate")
+        tab = self.tabs["Calibrate"]
+        tab.tree.selection_set(button)
+        tab.tree.see(button)
+
+    def go_flag_scan(self):
+        self.goto("Game Flag")
+        self.tabs["Game Flag"]._start()
+
+    def go_play(self):
+        self.goto("Play")
+        if not self.engine:
+            self.tabs["Play"]._toggle()
 
     def save(self):
         config.save(self.cfg)
@@ -164,6 +182,31 @@ class Tab(ttk.Frame):
         pass
 
 
+class CheckRow:
+    """One line of the Setup checklist: status mark, text, optional fix-it button."""
+    MARKS = {True: ("✔", "#1a7f37"), False: ("✘", "#c62828"), None: ("•", "#888")}
+
+    def __init__(self, parent, row):
+        self.mark = ttk.Label(parent, font=("Segoe UI", 12, "bold"), width=2)
+        self.mark.grid(row=row, column=0, sticky="nw", pady=3)
+        self.text = ttk.Label(parent, wraplength=620, justify="left")
+        self.text.grid(row=row, column=0, sticky="w", padx=(26, 0), pady=3)
+        self.btn = ttk.Button(parent, width=16)
+        self.btn.grid(row=row, column=1, sticky="e", padx=(8, 0), pady=3)
+        self.ok = None
+
+    def set(self, ok, text, button=None, command=None):
+        self.ok = ok
+        sym, color = self.MARKS[ok]
+        self.mark.config(text=sym, foreground=color)
+        self.text.config(text=text)
+        if button:
+            self.btn.config(text=button, command=command)
+            self.btn.grid()
+        else:
+            self.btn.grid_remove()
+
+
 class LevelMeter(tk.Canvas):
     """Horizontal level bar with a marker at the note-detection threshold."""
 
@@ -230,48 +273,159 @@ class SetupTab(Tab):
         self.gs_lbl = ttk.Label(gs, foreground="#666")
         self.gs_lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
-        chk = ttk.LabelFrame(self, text="Checks", padding=10)
+        chk = ttk.LabelFrame(self, text="Ready to play?", padding=10)
         chk.pack(fill="x", pady=(12, 0))
-        self.vigem_lbl = ttk.Label(chk)
-        self.vigem_lbl.grid(row=0, column=0, sticky="w")
-        self.vigem_btn = ttk.Button(chk, text="Get ViGEmBus driver",
-                                    command=lambda: webbrowser.open(setup_helpers.VIGEM_URL))
-        self.vigem_btn.grid(row=0, column=1, sticky="w", padx=8)
-        self.ini_lbl = ttk.Label(chk, wraplength=560)
-        self.ini_lbl.grid(row=1, column=0, sticky="w", pady=(8, 0))
-        btns = ttk.Frame(chk)
-        btns.grid(row=1, column=1, sticky="w", padx=8, pady=(8, 0))
-        ttk.Button(btns, text="Find…", command=self._browse_ini).pack(side="left")
-        self.apply_btn = ttk.Button(btns, text="Apply note bindings", command=self._apply)
-        self.apply_btn.pack(side="left", padx=4)
-        self.game_lbl = ttk.Label(chk)
-        self.game_lbl.grid(row=2, column=0, sticky="w", pady=(8, 0))
-        ttk.Button(chk, text="Re-check", command=self.refresh).grid(row=2, column=1, sticky="w", padx=8, pady=(8, 0))
-        self.refresh()
+        self.ready_lbl = ttk.Label(chk, font=MID)
+        self.ready_lbl.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        self.rows = {}
+        for i, key in enumerate(["driver", "bindings", "game", "dupes", "noise", "notes", "flag", "play"]):
+            self.rows[key] = CheckRow(chk, i + 1)
+        chk.columnconfigure(0, weight=1)
+        self._state = {}
+        self._refreshing = False
+        self._last_refresh = 0.0
+        self._last_proc_scan = -999.0
+        self._update_noise_label()
 
     def on_show(self):
-        self.refresh()
+        self.refresh(scan_processes=True)
 
-    def refresh(self):
-        ok = setup_helpers.vigem_installed()
-        self.vigem_lbl.config(text=("✔ Virtual controller driver (ViGEmBus) is installed" if ok else
-                                    "✘ ViGEmBus is not installed -- needed to send notes to the game"))
-        self.vigem_btn.grid() if not ok else self.vigem_btn.grid_remove()
-        path = setup_helpers.find_ini(self.app.cfg.get("longshot_ini", ""))
-        if path:
-            self.app.cfg["longshot_ini"] = path
-            ok_b = setup_helpers.bindings_ok(path)
-            self.ini_lbl.config(text=f"{'✔' if ok_b else '✘'} Longshot settings: {path}\n" +
-                                ("Ocarina notes are bound to the controller." if ok_b else
-                                 "Ocarina notes aren't bound yet -- close Longshot, then Apply note bindings."))
-            self.apply_btn.state(["!disabled"] if not ok_b else ["disabled"])
+    # -- checklist ---------------------------------------------------------
+    def refresh(self, scan_processes=False):
+        if self._refreshing:
+            return
+        self._refreshing = True
+        self._last_refresh = time.monotonic()
+        if scan_processes:
+            self._last_proc_scan = -999.0
+        cfg = self.app.cfg
+
+        def collect():
+            st = {"vigem": setup_helpers.vigem_installed(), "running": game_running()}
+            if st["running"]:
+                st["exe"] = setup_helpers._running_exe_path()
+            st["ini"] = setup_helpers.find_ini(cfg.get("longshot_ini", ""))
+            st["bindings"] = setup_helpers.bindings_ok(st["ini"]) if st["ini"] else False
+            f = cfg["flag"]
+            st["flag"] = (GameFlag(f["address"], f["up_value"], f["down_value"]).read()
+                          if st["running"] and f["address"] else None)
+            if time.monotonic() - self._last_proc_scan > 10:
+                self._last_proc_scan = time.monotonic()
+                st["others"] = setup_helpers.other_instances()
+            return st
+
+        def done(st):
+            self._refreshing = False
+            self._state.update(st)
+            changed = False
+            if st.get("ini") and st["ini"] != cfg.get("longshot_ini"):
+                cfg["longshot_ini"], changed = st["ini"], True
+            if st.get("exe") and st["exe"] != cfg.get("longshot_exe"):
+                cfg["longshot_exe"], changed = st["exe"], True
+            if changed:
+                self.app.save()
+            self._render()
+
+        def failed(msg):
+            self._refreshing = False
+
+        self.app.run_bg(collect, done, failed)
+
+    def _render(self):
+        st, cfg, r = self._state, self.app.cfg, self.rows
+        running = st.get("running", False)
+
+        if st.get("vigem"):
+            r["driver"].set(True, "Virtual controller driver (ViGEmBus) installed")
         else:
-            self.ini_lbl.config(text="✘ Couldn't find longshot_options.ini -- start Longshot once, or use Find…")
-            self.apply_btn.state(["disabled"])
-        running = game_running()
-        self.game_lbl.config(text="Longshot is running" if running else "Longshot is not running")
+            r["driver"].set(False, "ViGEmBus driver not installed -- needed to send notes to the game",
+                            "Get driver", lambda: webbrowser.open(setup_helpers.VIGEM_URL))
+
+        if not st.get("ini"):
+            r["bindings"].set(False, "Couldn't find Longshot's settings file (longshot_options.ini)",
+                              "Find…", self._browse_ini)
+        elif not st.get("bindings"):
+            r["bindings"].set(False, "Ocarina notes aren't bound to the controller yet" +
+                              (" -- close Longshot first" if running else ""), "Apply bindings", self._apply)
+        else:
+            r["bindings"].set(True, "Ocarina notes are bound to the controller in Longshot")
+
+        if running:
+            r["game"].set(True, "Longshot is running")
+        else:
+            r["game"].set(False, "Longshot isn't running", "Start Longshot" if setup_helpers.can_start_longshot(cfg)
+                          else None, self._start_game)
+
+        others = st.get("others", [])
+        if others:
+            r["dupes"].set(False, f"{len(others)} other translator process(es) running -- their virtual "
+                                  "controller can make Longshot ignore this one", "Close them", self._close_dupes)
+        else:
+            r["dupes"].set(True, "No other translator running")
+
+        nf = cfg["match"]["noise_floor"]
+        if cfg.get("noise_measured"):
+            r["noise"].set(True, f"Background noise measured ({nf:.4f})")
+        else:
+            r["noise"].set(False, "Background noise not measured yet" +
+                           (" -- do it with the game running at your normal volume"
+                            if cfg["game_sound_filter"]["enabled"] else ""), "Measure", self._measure)
+
+        missing = [d["button"] for d in config.NOTE_DEFS if not cfg["notes"].get(d["button"], {}).get("hz")]
+        n = len(config.NOTE_DEFS) - len(missing)
+        if missing:
+            r["notes"].set(False, f"{n} of {len(config.NOTE_DEFS)} notes calibrated -- missing {', '.join(missing)}",
+                           "Calibrate", lambda: self.app.go_calibrate(missing[0]))
+        else:
+            r["notes"].set(True, "All 5 notes calibrated")
+
+        mode = cfg["gate_mode"]
+        if mode != "game":
+            r["flag"].set(None, "Game flag not used -- listening " +
+                          ("while Scroll Lock is on" if mode == "hotkey" else "all the time") + " (Play tab)")
+        elif not running:
+            r["flag"].set(None, "Game flag: start Longshot to check it")
+        elif st.get("flag") is None:
+            r["flag"].set(False, "Game flag isn't working (Longshot was restarted) -- using Scroll Lock until "
+                                 "it's found again", "Find flag", self.app.go_flag_scan)
+        else:
+            r["flag"].set(True, f"Game flag working -- ocarina is {'up' if st['flag'] else 'put away'}")
+
+        self._render_play()
+        ready = sum(1 for row in r.values() if row.ok)
+        self.ready_lbl.config(text=f"{ready} of {len(r)} ready" + ("  -- all set!" if ready == len(r) else ""))
+
+    def _render_play(self):
+        eng = self.app.engine
+        if eng:
+            self.rows["play"].set(True, "Playing -- " + ("listening" if eng.gate_state == "on" else
+                                  "waiting for the ocarina") + f" ({eng.gate_note})",
+                                  "Open Play tab", lambda: self.app.goto("Play"))
+        else:
+            self.rows["play"].set(False, "Not playing yet", "Start playing", self.app.go_play)
+
+    def _start_game(self):
+        try:
+            setup_helpers.start_longshot(self.app.cfg)
+            self.rows["game"].set(None, "Starting Longshot…")
+            self.app.after(6000, self.refresh)
+        except Exception as e:
+            messagebox.showerror("Ocarina Translator", str(e))
+
+    def _close_dupes(self):
+        others = self._state.get("others", [])
+        if not others:
+            return
+        lines = "\n".join(f"  {desc} (pid {pid})" for pid, desc in others)
+        if messagebox.askyesno("Ocarina Translator", f"Close these other translator copies?\n\n{lines}"):
+            setup_helpers.close_instances([pid for pid, _ in others])
+            self._state["others"] = []
+            self.refresh(scan_processes=True)
+
+    def _update_noise_label(self):
         nf = self.app.cfg["match"]["noise_floor"]
-        self.noise_lbl.config(text=f"background level: {nf:.4f}")
+        self.noise_lbl.config(text=f"background level: {nf:.4f}" if self.app.cfg.get("noise_measured")
+                              else "not measured yet")
 
     def _gs_changed(self):
         dev = self.gs_dev.get()
@@ -281,6 +435,10 @@ class SetupTab(Tab):
         self.app.start_game_audio()
 
     def tick(self):
+        if time.monotonic() - self._last_refresh > 3.0:
+            self.refresh()
+        if self._state:
+            self._render_play()
         ga = self.app.game_audio
         if not self.gs_on.get():
             self.gs_lbl.config(text="Off -- fine with headphones.")
@@ -298,6 +456,7 @@ class SetupTab(Tab):
 
     def _measure(self):
         if not self.app.monitor:
+            messagebox.showwarning("Ocarina Translator", "The mic isn't open -- pick one above (or stop Play first).")
             return
         self.app.monitor_paused = True
         self.noise_btn.state(["disabled"])
@@ -307,7 +466,9 @@ class SetupTab(Tab):
             self.app.monitor_paused = False
             self.noise_btn.state(["!disabled"])
             self.app.cfg["match"]["noise_floor"] = floor
+            self.app.cfg["noise_measured"] = True
             self.app.save()
+            self._update_noise_label()
             self.refresh()
 
         self.app.run_bg(lambda: audio.measure_noise_floor(self.app.monitor), done)
