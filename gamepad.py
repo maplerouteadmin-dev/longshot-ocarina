@@ -61,3 +61,39 @@ def release(slot: str):
     gp = connect()
     gp.release_button(button=SLOT_BUTTONS[slot])
     gp.update()
+
+
+# ---- any controller input (for custom note mappings) ------------------------
+# Names are the Xbox inputs actually pressed on the virtual pad. With a
+# Switch-style layout Longshot treats virtual A/B and X/Y as swapped.
+BUTTONS = {
+    "A": XUSB.XUSB_GAMEPAD_A, "B": XUSB.XUSB_GAMEPAD_B,
+    "X": XUSB.XUSB_GAMEPAD_X, "Y": XUSB.XUSB_GAMEPAD_Y,
+    "LB": XUSB.XUSB_GAMEPAD_LEFT_SHOULDER, "RB": XUSB.XUSB_GAMEPAD_RIGHT_SHOULDER,
+    "Start": XUSB.XUSB_GAMEPAD_START, "Back": XUSB.XUSB_GAMEPAD_BACK,
+    "Guide": XUSB.XUSB_GAMEPAD_GUIDE,
+    "Left stick click": XUSB.XUSB_GAMEPAD_LEFT_THUMB, "Right stick click": XUSB.XUSB_GAMEPAD_RIGHT_THUMB,
+    "D-pad up": XUSB.XUSB_GAMEPAD_DPAD_UP, "D-pad down": XUSB.XUSB_GAMEPAD_DPAD_DOWN,
+    "D-pad left": XUSB.XUSB_GAMEPAD_DPAD_LEFT, "D-pad right": XUSB.XUSB_GAMEPAD_DPAD_RIGHT,
+}
+TRIGGERS = ["LT", "RT"]
+STICKS = ["Left stick", "Right stick"]
+ALL_INPUTS = list(BUTTONS) + TRIGGERS + STICKS
+
+
+def set_input(name, on, x=0.0, y=0.0, amount=1.0):
+    """Press/release any input. Sticks take x/y in -1..1 (y up), triggers take 0..1."""
+    gp = connect()
+    if name in BUTTONS:
+        (gp.press_button if on else gp.release_button)(button=BUTTONS[name])
+    elif name == "LT":
+        gp.left_trigger_float(value_float=amount if on else 0.0)
+    elif name == "RT":
+        gp.right_trigger_float(value_float=amount if on else 0.0)
+    elif name == "Left stick":
+        gp.left_joystick_float(x_value_float=x if on else 0.0, y_value_float=y if on else 0.0)
+    elif name == "Right stick":
+        gp.right_joystick_float(x_value_float=x if on else 0.0, y_value_float=y if on else 0.0)
+    else:
+        return
+    gp.update()

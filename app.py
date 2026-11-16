@@ -34,6 +34,7 @@ from engine import Engine
 from flag_scan import FlagScanner
 from matcher import MatchParams, NoteMatcher
 from ocarina_flag import GameFlag, game_running
+from custom_ui import CustomMappings
 from overlay import FingeringOverlay
 
 BIG = ("Segoe UI", 28, "bold")
@@ -855,6 +856,15 @@ class PlayTab(Tab):
             ttk.Checkbutton(row, text=f"{d['label']} ({d['pitch']})", variable=var,
                             command=self._learned_changed).pack(side="left", padx=(8, 0))
 
+        self.focus_on = tk.BooleanVar(value=app.cfg.get("focus_game_on_note", True))
+        ttk.Checkbutton(self, text="Bring Longshot to the front when a note is played (so your controller "
+                                   "works straight away)", variable=self.focus_on,
+                        command=self._focus_changed).pack(anchor="w", pady=(6, 0))
+
+        self.custom_btn = ttk.Button(self, text="▸ Custom mappings (advanced)", command=self._toggle_custom)
+        self.custom_btn.pack(anchor="w", pady=(6, 0))
+        self.custom = CustomMappings(self, app)
+
         self.btn = ttk.Button(self, text="Start", command=self._toggle)
         self.btn.pack(pady=10)
         self.gate = ttk.Label(self, text="stopped", font=MID)
@@ -863,6 +873,21 @@ class PlayTab(Tab):
         self.held.pack(pady=6)
         self.log = tk.Text(self, height=10, state="disabled")
         self.log.pack(fill="both", expand=True)
+
+    def _focus_changed(self):
+        self.app.cfg["focus_game_on_note"] = self.focus_on.get()
+        self.app.save()
+
+    def _toggle_custom(self):
+        if self.custom.frame.winfo_ismapped():
+            self.custom.frame.pack_forget()
+            self.custom_btn.config(text="▸ Custom mappings (advanced)")
+        else:
+            self.custom.frame.pack(fill="x", after=self.custom_btn, pady=(4, 0))
+            self.custom_btn.config(text="▾ Custom mappings (advanced)")
+
+    def on_readings(self, readings):
+        self.custom.on_readings(readings)
 
     def _pop_changed(self):
         self.app.overlay.set_enabled(self.pop_on.get())

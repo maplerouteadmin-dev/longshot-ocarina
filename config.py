@@ -54,6 +54,9 @@ DEFAULTS = {
     "game_sound_filter": {"enabled": True, "device": ""},
     # fingering pop-up over the game while the ocarina is up; learned = buttons to hide
     "overlay": {"enabled": False, "learned": [], "x": None, "y": None},
+    "focus_game_on_note": True,   # bring Longshot to the front when a note is played
+    # extra pitch -> any controller input mappings (Play tab > Custom mappings)
+    "custom": [],
 }
 
 
