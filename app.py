@@ -37,6 +37,7 @@ from ocarina_flag import GameFlag, game_running
 BIG = ("Segoe UI", 28, "bold")
 MID = ("Segoe UI", 14)
 TAKES_PER_NOTE = 3
+WAIT_FOR_NOTE = 15.0  # seconds Record waits for you to start playing
 
 
 class App(tk.Tk):
@@ -367,7 +368,7 @@ class CalibrateTab(Tab):
         self.finger_note.pack()
         row = ttk.Frame(right)
         row.pack(pady=6)
-        self.rec_btn = ttk.Button(row, text="Record take", command=self._record)
+        self.rec_btn = ttk.Button(row, text="Record take  (Space)", command=self._record)
         self.rec_btn.pack(side="left")
         ttk.Button(row, text="Clear takes", command=self._clear).pack(side="left", padx=4)
         ttk.Button(row, text="Save note", command=self._save_note).pack(side="left")
@@ -423,11 +424,21 @@ class CalibrateTab(Tab):
                                                    "check your ocarina's own chart.")
         self._show_takes()
 
+    def on_show(self):
+        self.app.bind("<space>", self._space)
+
+    def _space(self, _e=None):
+        if self.app.current_tab() is self:
+            self._record()
+            return "break"
+        return None
+
     def _show_takes(self):
         d = self._current()
         ts = self.takes.get(d["button"], [])
         self.takes_lbl.config(text="  ".join(f"{t['hz']:.1f}Hz (±{t['spread_cents']/2:.0f}¢)" for t in ts)
-                              or f"Record {TAKES_PER_NOTE} takes, then Save note.")
+                              or f"Record {TAKES_PER_NOTE} takes. Click Record or press Space, get your fingers "
+                                 f"on, then play -- recording starts when it hears the note.")
 
     def _record(self):
         d = self._current()
@@ -437,19 +448,25 @@ class CalibrateTab(Tab):
         self.app.monitor_paused = True
         self.rec_btn.state(["disabled"])
         params = config.match_params(self.app.cfg)
-        self.rec_lbl.config(text="Get ready…")
-        self.app.after(700, lambda: self.rec_lbl.config(text="▶ PLAY and hold the note…"))
+        self.rec_lbl.config(text=f"Ready -- play {d['button']} whenever you are (waiting up to "
+                                 f"{WAIT_FOR_NOTE:.0f}s)…", foreground="")
+
+        def started():
+            self.app.ui_queue.put(lambda: self.rec_lbl.config(text="● Recording -- keep holding…",
+                                                              foreground="#b00"))
 
         def work():
-            time.sleep(0.7)
-            return calibration.record_take(self.app.monitor, params, seconds=2.0)
+            return calibration.record_take(self.app.monitor, params, seconds=2.0,
+                                           wait_for_note=WAIT_FOR_NOTE, on_start=started)
 
         def done(take):
             self.app._busy = False
             self.app.monitor_paused = False
             self.rec_btn.state(["!disabled"])
+            self.rec_lbl.config(foreground="")
             if take is None:
-                self.rec_lbl.config(text="Didn't hear a steady note -- try again (check the level on Setup).")
+                self.rec_lbl.config(text="Didn't hear a steady note -- click Record (or press Space) to try "
+                                         "again. Check the level bar on Setup if this keeps happening.")
                 return
             self.takes.setdefault(d["button"], []).append(take)
             n = len(self.takes[d["button"]])

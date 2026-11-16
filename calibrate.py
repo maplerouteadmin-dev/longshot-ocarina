@@ -4,7 +4,6 @@
     python calibrate.py X Y B        # just these buttons
 """
 import sys
-import time
 
 import audio
 import calibration
@@ -35,9 +34,10 @@ def main():
             diagram.render_and_open(d["pitch"])
             takes = []
             while len(takes) < TAKES:
-                input(f"  Take {len(takes) + 1}/{TAKES}: finger the note, press Enter, then play and hold ~2s...")
-                time.sleep(0.15)
-                take = calibration.record_take(an, params)
+                input(f"  Take {len(takes) + 1}/{TAKES}: press Enter, then play the note whenever you're ready "
+                      "and hold it ~2s (recording starts when it hears you)...")
+                take = calibration.record_take(an, params, wait_for_note=15,
+                                               on_start=lambda: print("  recording..."))
                 if take is None:
                     print("  Didn't hear a steady note -- try again.")
                     continue

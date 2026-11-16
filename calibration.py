@@ -13,21 +13,45 @@ import pitch
 from matcher import MatchParams
 
 
-def record_take(analyzer, params: MatchParams, seconds=2.0, settle=0.25, abort=None):
+def record_take(analyzer, params: MatchParams, seconds=2.0, settle=0.25, abort=None,
+                wait_for_note=None, on_start=None):
     """Collect one take from a running Analyzer.
+
+    wait_for_note: if set, wait up to this many seconds for the note to begin
+    and start the `seconds`-long recording from there, so the player can take
+    their time getting their fingers on after clicking Record. on_start() is
+    called when the note is heard.
 
     Returns {"hz", "spread_cents", "n"} or None if no steady tone was heard.
     `settle` skips the start of the note (the breath attack) once sound begins.
     """
     gate = max(params.min_level, params.noise_floor * params.level_margin)
+
+    def is_voiced(r):
+        return r.freq and r.conf >= params.min_conf and r.level >= gate
+
     analyzer.drain()
-    end = time.monotonic() + seconds
     voiced = []
+    if wait_for_note:
+        deadline = time.monotonic() + wait_for_note
+        streak = []
+        while not voiced:
+            if (abort and abort()) or time.monotonic() > deadline:
+                return None
+            for r in analyzer.drain():
+                streak = streak + [r] if is_voiced(r) else []
+                if streak and streak[-1].t - streak[0].t >= 0.08:   # sustained, not a click
+                    voiced = [(x.t, x.freq) for x in streak]
+                    break
+            time.sleep(0.02)
+        if on_start:
+            on_start()
+    end = time.monotonic() + seconds
     while time.monotonic() < end:
         if abort and abort():
             return None
         for r in analyzer.drain():
-            if r.freq and r.conf >= params.min_conf and r.level >= gate:
+            if is_voiced(r):
                 voiced.append((r.t, r.freq))
         time.sleep(0.02)
     if not voiced:
