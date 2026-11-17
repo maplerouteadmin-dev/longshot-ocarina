@@ -19,6 +19,7 @@ import tkinter as tk
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import config
+import diagram
 import fingering
 import gamewin
 from ocarina_flag import GameFlag
@@ -37,12 +38,7 @@ MIN_SCALE, MAX_SCALE = 0.6, 2.0
 
 
 def _font(size, bold=False):
-    for name in (("segoeuib.ttf", "arialbd.ttf") if bold else ("segoeui.ttf", "arial.ttf")):
-        try:
-            return ImageFont.truetype(name, size * S)
-        except Exception:
-            continue
-    return ImageFont.load_default()
+    return diagram.load_font(size * S, bold)
 
 
 def _chip(d, x, y, label):

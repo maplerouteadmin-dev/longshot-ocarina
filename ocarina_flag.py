@@ -15,6 +15,8 @@ read() distinguishes "down" from "can't tell" (game not running, unreadable, or
 no clear majority) so the engine can fall back to the hotkey instead of
 silently never listening.
 """
+import time
+
 import procmem
 from flag_spots import LINUX_OFFSETS, OFFSETS
 
@@ -46,8 +48,14 @@ class GameFlag:
         self._arena = None
         self.last_raw = None
         self.via_chains = False           # True when the last read used the arena spots ("automatic")
+        self._next_attach = 0.0           # throttle: looking for the game scans every process
 
     def _attach(self):
+        now = time.monotonic()
+        if now < self._next_attach:
+            self._pm = None
+            return None
+        self._next_attach = now + 1.0
         self._pm = procmem.open_game()
         self._arena = None
         if self._pm is not None and self.offsets:

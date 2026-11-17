@@ -101,24 +101,29 @@ def other_instances():
 
 
 def _other_instances_linux(me):
+    here = os.path.dirname(os.path.abspath(__file__))
+    ours = {os.path.join(here, "app.py"), os.path.join(here, "translator.py")}
     found = []
     for d in os.listdir("/proc"):
         if not d.isdigit() or int(d) in me:
             continue
         try:
             with open(f"/proc/{d}/cmdline", "rb") as f:
-                cmd = f.read().replace(b"\x00", b" ").decode(errors="ignore")
+                argv = [a.decode(errors="ignore") for a in f.read().split(b"\x00") if a]
             with open(f"/proc/{d}/stat") as f:
                 ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+            cwd = os.readlink(f"/proc/{d}/cwd")
         except (OSError, ValueError, IndexError):
             continue
-        low = cmd.lower()
-        if ppid in me or WAIT_FLAG in low:
+        if not argv or ppid in me or WAIT_FLAG in argv:
             continue
-        if "ocarinatranslator" in low.replace(" ", "") and "app.py" not in low:
+        if os.path.basename(argv[0]).lower() == "ocarinatranslator":      # the built binary
             found.append((int(d), "OcarinaTranslator"))
-        elif "translator.py" in low or "ocarinatranslator/app.py" in low or "flag_scan" in low:
-            found.append((int(d), cmd.strip()))
+            continue
+        if "python" in os.path.basename(argv[0]).lower():
+            scripts = {os.path.normpath(os.path.join(cwd, a)) for a in argv[1:3]}
+            if scripts & ours:
+                found.append((int(d), " ".join(argv[:3])))
     return found
 
 

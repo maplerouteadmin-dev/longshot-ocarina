@@ -152,14 +152,20 @@ The app has Linux support, but it has **not been tested on a real Linux
 machine yet**. If you try it, please report back on
 [issue #1](https://github.com/maplerouteadmin-dev/longshot-ocarina/issues/1).
 
-Run it from source (there's no Linux download yet):
+There's no ready-made Linux binary: run it from source.
 
 ```bash
-sudo apt install python3-tk python3-venv xdotool      # or your distro's equivalents
+git clone -b linux-support https://github.com/maplerouteadmin-dev/longshot-ocarina.git
+cd longshot-ocarina
+# Debian/Ubuntu names shown; use your distro's equivalents
+sudo apt install python3-tk python3-venv python3-dev build-essential xdotool fonts-dejavu-core
 python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt       # evdev compiles here, hence python3-dev/build-essential
 python app.py
 ```
+
+Arch/SteamOS: `sudo pacman -S tk python xdotool ttf-dejavu base-devel`. Fedora:
+`sudo dnf install python3-tkinter python3-devel gcc xdotool dejavu-sans-fonts`.
 
 One-time permissions:
 
@@ -187,6 +193,23 @@ What to expect:
   Deck gaming mode, the pop-up may not show.
 - **Start with Longshot:** adds `~/.config/autostart/ocarina-translator.desktop`.
 - **Build a single-file binary:** `./build_linux.sh`.
+
+### Testing it and reporting back
+
+I don't have Linux hardware that runs Longshot, so every Linux report helps.
+Please post on [issue #1](https://github.com/maplerouteadmin-dev/longshot-ocarina/issues/1)
+with your distro, desktop (X11 or Wayland), how you run Longshot, and which of
+these worked:
+
+1. The Setup checklist: which lines are ✔ and which are ✘ (a screenshot is
+   perfect).
+2. The microphone level bar moves, and Calibrate records all five notes.
+3. With **Play** started and the ocarina up in-game, notes reach the game.
+4. The game flag: does Setup say *Longshot is running*? Does the manual scan
+   (More settings → Game Flag) find the flag?
+5. The fingering pop-up and *bring Longshot to the front*.
+6. Anything that crashed: run `python app.py` from a terminal and paste the
+   error.
 
 ## Troubleshooting
 

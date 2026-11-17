@@ -147,7 +147,9 @@ else:
                     lo, hi = (int(x, 16) for x in parts[0].split("-"))
                     perms = parts[1]
                     path = parts[5].strip() if len(parts) > 5 else ""
-                    anon = path == "" or path.startswith("[heap") or path.startswith("[anon")
+                    # anonymous memory, plus memfd/shared-memory files (emulators often keep guest RAM there)
+                    anon = (path == "" or path.startswith(("[heap", "[anon", "/memfd:", "/dev/shm/", "/SYSV"))
+                            or path.endswith("(deleted)"))
                     # adjacent anonymous maps (e.g. a big reservation committed piecewise) form one "allocation"
                     if anon and run_start is not None and prev_end == lo:
                         base = run_start
@@ -157,9 +159,25 @@ else:
                         run_start = None
                     prev_end = hi
                     out.append(Region(lo, hi - lo, base, committed=perms[0] != "-" or perms[1] != "-",
-                                      private=anon and perms[3] == "p", writable=perms[1] == "w",
+                                      private=anon, writable=perms[1] == "w",
                                       image=bool(path) and not path.startswith("[")))
             return out
+
+
+def access_problem():
+    """None if we can read the running game's memory (or it isn't running), else a short reason."""
+    if IS_WINDOWS:
+        return None
+    pid = _find_pid(PROCESS_NAMES)
+    if pid is None:
+        return None
+    try:
+        os.close(os.open(f"/proc/{pid}/mem", os.O_RDONLY))
+        return None
+    except PermissionError:
+        return "Linux is blocking this app from reading Longshot's memory (ptrace) -- see the README's Linux section"
+    except OSError as e:
+        return f"Can't read Longshot's memory: {e}"
 
 
 def open_game():

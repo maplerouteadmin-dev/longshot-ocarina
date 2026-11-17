@@ -31,11 +31,31 @@ BODY_FILL = (235, 220, 190)  # terracotta-ish
 HOLE_R = 28
 
 
-def _font(size):
+_FONT_FILES = {
+    False: ("segoeui.ttf", "arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf"),
+    True: ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
+           "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+           "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf"),
+}
+
+
+def load_font(px, bold=False):
+    """A TrueType font at px pixels: Segoe UI/Arial on Windows, DejaVu/Liberation on Linux."""
+    for name in _FONT_FILES[bold]:
+        try:
+            return ImageFont.truetype(name, px)
+        except Exception:
+            continue
     try:
-        return ImageFont.truetype("arial.ttf", size)
-    except Exception:
+        return ImageFont.load_default(size=px)     # Pillow >= 10.1 scales the built-in font
+    except TypeError:
         return ImageFont.load_default()
+
+
+def _font(size):
+    return load_font(size)
 
 
 def _draw_hole(draw, cx, cy, covered, label):
@@ -119,7 +139,11 @@ def render(note_name: str) -> str:
 
 def open_image(path: str):
     try:
-        os.startfile(path)  # Windows
+        if hasattr(os, "startfile"):
+            os.startfile(path)  # Windows
+        else:
+            import subprocess
+            subprocess.Popen(["xdg-open", path])
     except Exception as e:
         print(f"  (couldn't auto-open image: {e}; open it yourself: {path})")
 
