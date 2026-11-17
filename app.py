@@ -54,8 +54,8 @@ class App(tk.Tk):
             self.iconphoto(True, self._icon)
         except Exception:
             pass
-        self.geometry("920x860")
-        self.minsize(840, 760)
+        self.geometry("920x780")
+        self.minsize(820, 640)
         self.cfg = config.load()
         self.ui_queue = queue.Queue()
         self.monitor = None
@@ -69,12 +69,18 @@ class App(tk.Tk):
         nb.pack(fill="both", expand=True)
         self.nb = nb
         self.tabs = {}
-        for name, cls in [("Setup", SetupTab), ("Calibrate", CalibrateTab), ("Test", TestTab),
-                          ("Play", PlayTab), ("Game Flag", FlagTab), ("Advanced", AdvancedTab)]:
+        # The three everyday tabs up front; everything else under "More settings".
+        for name, cls in [("Setup", SetupTab), ("Calibrate", CalibrateTab), ("Play", PlayTab)]:
             tab = cls(nb, self)
             nb.add(tab, text=name)
             self.tabs[name] = tab
+        self.more = MoreTab(nb, self)
+        nb.add(self.more, text="More settings")
+        for name, cls in [("Play options", PlayOptionsTab), ("Sound & startup", SoundStartupTab),
+                          ("Practice", TestTab), ("Game Flag", FlagTab), ("Timing", AdvancedTab)]:
+            self.tabs[name] = self.more.add(name, cls)
         nb.bind("<<NotebookTabChanged>>", lambda e: self.current_tab().on_show())
+        self.more.nb.bind("<<NotebookTabChanged>>", lambda e: self.current_tab().on_show())
 
         self.status = ttk.Label(self, anchor="w", padding=(8, 2))
         self.status.pack(fill="x")
@@ -117,10 +123,16 @@ class App(tk.Tk):
 
     # ---- shared plumbing -------------------------------------------------
     def current_tab(self):
-        return self.tabs[self.nb.tab(self.nb.select(), "text")]
+        tab = self.nametowidget(self.nb.select())
+        return tab.current() if isinstance(tab, MoreTab) else tab
 
     def goto(self, name):
-        self.nb.select(list(self.tabs).index(name))
+        tab = self.tabs[name]
+        if tab.master is self.more.nb:
+            self.nb.select(self.more)
+            self.more.nb.select(tab)
+        else:
+            self.nb.select(tab)
 
     def go_calibrate(self, button):
         self.goto("Calibrate")
@@ -306,27 +318,6 @@ class SetupTab(Tab):
         self.noise_lbl = ttk.Label(row, text="")
         self.noise_lbl.pack(side="left", padx=8)
 
-        gs = ttk.LabelFrame(self, text="Game sounds", padding=10)
-        gs.pack(fill="x", pady=(12, 0))
-        gsf = app.cfg["game_sound_filter"]
-        self.gs_on = tk.BooleanVar(value=gsf["enabled"])
-        ttk.Checkbutton(gs, text="Ignore notes the game itself is playing (music, Link playing your note back) "
-                                 "-- needed when the mic can hear the TV/speakers",
-                        variable=self.gs_on, command=self._gs_changed).grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(gs, text="Game audio comes out of:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.default_out = "Windows default output"
-        self.gs_dev = ttk.Combobox(gs, values=[self.default_out] + echo.output_devices(), state="readonly", width=46)
-        self.gs_dev.set(gsf["device"] or self.default_out)
-        self.gs_dev.bind("<<ComboboxSelected>>", lambda e: self._gs_changed())
-        self.gs_dev.grid(row=1, column=1, sticky="w", padx=6, pady=(6, 0))
-        self.gs_lbl = ttk.Label(gs, foreground="#666")
-        self.gs_lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
-
-        self.auto_on = tk.BooleanVar(value=setup_helpers.autostart_enabled())
-        ttk.Checkbutton(self, text="Start automatically when Longshot starts (runs hidden in the background "
-                                   "after you log in to Windows, then opens and starts playing)",
-                        variable=self.auto_on, command=self._auto_changed).pack(anchor="w", pady=(12, 0))
-
         chk = ttk.LabelFrame(self, text="Ready to play?", padding=10)
         chk.pack(fill="x", pady=(12, 0))
         self.ready_lbl = ttk.Label(chk, font=MID)
@@ -458,7 +449,7 @@ class SetupTab(Tab):
         mode = cfg["gate_mode"]
         if mode != "game":
             r["flag"].set(None, "Game flag not used -- listening " +
-                          ("while Scroll Lock is on" if mode == "hotkey" else "all the time") + " (Play tab)")
+                          ("while Scroll Lock is on" if mode == "hotkey" else "all the time") + " (More settings > Play options)")
         elif not running:
             r["flag"].set(None, "Game flag: start Longshot to check it")
         elif st.get("flag") is None:
@@ -504,34 +495,11 @@ class SetupTab(Tab):
         self.noise_lbl.config(text=f"background level: {nf:.4f}" if self.app.cfg.get("noise_measured")
                               else "not measured yet")
 
-    def _auto_changed(self):
-        try:
-            setup_helpers.set_autostart(self.auto_on.get())
-        except Exception as e:
-            self.auto_on.set(setup_helpers.autostart_enabled())
-            messagebox.showerror("Ocarina Translator", f"Couldn't change the startup setting: {e}")
-
-    def _gs_changed(self):
-        dev = self.gs_dev.get()
-        self.app.cfg["game_sound_filter"] = {"enabled": self.gs_on.get(),
-                                             "device": "" if dev == self.default_out else dev}
-        self.app.save()
-        self.app.start_game_audio()
-
     def tick(self):
         if time.monotonic() - self._last_refresh > 3.0:
             self.refresh()
         if self._state:
             self._render_play()
-        ga = self.app.game_audio
-        if not self.gs_on.get():
-            self.gs_lbl.config(text="Off -- fine with headphones.")
-        elif ga is None or ga.error:
-            self.gs_lbl.config(text=(ga.error if ga else "not running"), foreground="#b00")
-        else:
-            dom = ga.dominant()
-            self.gs_lbl.config(foreground="#666", text=f"Listening to {ga.device_name}: "
-                               + (f"game is playing ~{dom:.0f} Hz" if dom else "game is quiet"))
 
     def _mic_changed(self, _e=None):
         self.app.cfg["mic_name"] = self.mic.get()
@@ -598,6 +566,59 @@ class SetupTab(Tab):
         self.meter.show(max(x.level for x in readings), gate)
         voiced = [x for x in readings if x.freq and x.conf >= p.min_conf and x.level >= gate]
         self.pitch_lbl.config(text=f"{voiced[-1].freq:.1f} Hz" if voiced else "--")
+
+
+class SoundStartupTab(Tab):
+    """More settings > Sound & startup: game-sound filter and start-with-Longshot."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent, app)
+        gs = ttk.LabelFrame(self, text="Game sounds", padding=10)
+        gs.pack(fill="x", pady=(0, 0))
+        gsf = app.cfg["game_sound_filter"]
+        self.gs_on = tk.BooleanVar(value=gsf["enabled"])
+        ttk.Checkbutton(gs, text="Ignore notes the game itself is playing (music, Link playing your note back) "
+                                 "-- needed when the mic can hear the TV/speakers",
+                        variable=self.gs_on, command=self._gs_changed).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(gs, text="Game audio comes out of:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.default_out = "Windows default output"
+        self.gs_dev = ttk.Combobox(gs, values=[self.default_out] + echo.output_devices(), state="readonly", width=46)
+        self.gs_dev.set(gsf["device"] or self.default_out)
+        self.gs_dev.bind("<<ComboboxSelected>>", lambda e: self._gs_changed())
+        self.gs_dev.grid(row=1, column=1, sticky="w", padx=6, pady=(6, 0))
+        self.gs_lbl = ttk.Label(gs, foreground="#666")
+        self.gs_lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        self.auto_on = tk.BooleanVar(value=setup_helpers.autostart_enabled())
+        ttk.Checkbutton(self, text="Start automatically when Longshot starts (runs hidden in the background "
+                                   "after you log in to Windows, then opens and starts playing)",
+                        variable=self.auto_on, command=self._auto_changed).pack(anchor="w", pady=(12, 0))
+
+
+    def _auto_changed(self):
+        try:
+            setup_helpers.set_autostart(self.auto_on.get())
+        except Exception as e:
+            self.auto_on.set(setup_helpers.autostart_enabled())
+            messagebox.showerror("Ocarina Translator", f"Couldn't change the startup setting: {e}")
+
+    def _gs_changed(self):
+        dev = self.gs_dev.get()
+        self.app.cfg["game_sound_filter"] = {"enabled": self.gs_on.get(),
+                                             "device": "" if dev == self.default_out else dev}
+        self.app.save()
+        self.app.start_game_audio()
+
+    def tick(self):
+        ga = self.app.game_audio
+        if not self.gs_on.get():
+            self.gs_lbl.config(text="Off -- fine with headphones.", foreground="#666")
+        elif ga is None or ga.error:
+            self.gs_lbl.config(text=(ga.error if ga else "not running"), foreground="#b00")
+        else:
+            dom = ga.dominant()
+            self.gs_lbl.config(foreground="#666", text=f"Listening to {ga.device_name}: "
+                               + (f"game is playing ~{dom:.0f} Hz" if dom else "game is quiet"))
 
 
 # ---- Calibrate -----------------------------------------------------------
@@ -681,7 +702,7 @@ class CalibrateTab(Tab):
             self.finger_note.config(text=f"{d['label']}: play any note that isn't one of your five ocarina "
                                          "notes (e.g. a C or G), then record it like the others. Leave it "
                                          "uncalibrated if you don't want it. To use it with the ocarina put away "
-                                         "too, turn that on in the Play tab.")
+                                         "too, turn that on in More settings > Play options.")
             self._show_takes()
             return
         path = os.path.join(diagram.OUT_DIR, f"{d['pitch']}.png")
@@ -853,99 +874,26 @@ class TestTab(Tab):
 
 # ---- Play ----------------------------------------------------------------
 class PlayTab(Tab):
+    """The everyday screen: Start/Stop, what it's doing, and the fingering pop-up switch."""
+
     def __init__(self, parent, app):
         super().__init__(parent, app)
-        mode = ttk.LabelFrame(self, text="When to listen", padding=8)
-        mode.pack(fill="x")
-        self.mode = tk.StringVar(value=app.cfg["gate_mode"])
-        for value, text in [("game", "Only while the ocarina is up in-game (game flag)"),
-                            ("hotkey", "While Scroll Lock is on"),
-                            ("always", "Always (testing only -- sounds can move your character)")]:
-            ttk.Radiobutton(mode, text=text, value=value, variable=self.mode,
-                            command=self._mode_changed).pack(anchor="w")
-        self.extras_away = tk.BooleanVar(value=app.cfg.get("extras_when_away", False))
-        ttk.Checkbutton(mode, text="Also listen for D-pad left and custom mappings while the ocarina is put "
-                                   "away (the mic stays on)", variable=self.extras_away,
-                        command=self._extras_changed).pack(anchor="w", pady=(4, 0))
-
-        pop = ttk.LabelFrame(self, text="Fingering pop-up (for learning)", padding=8)
-        pop.pack(fill="x", pady=(8, 0))
-        ov = app.overlay.cfg
-        self.pop_on = tk.BooleanVar(value=ov.get("enabled", False))
-        ttk.Checkbutton(pop, text="Show note fingerings over the game while the ocarina is up "
-                                  "(drag it to move it; Longshot must be windowed or borderless)",
-                        variable=self.pop_on, command=self._pop_changed).pack(anchor="w")
-        size = ttk.Frame(pop)
-        size.pack(anchor="w", pady=(4, 0))
-        ttk.Label(size, text="Size:").pack(side="left")
-        self.pop_size = tk.DoubleVar(value=app.overlay.scale())
-        slider = ttk.Scale(size, from_=0.6, to=2.0, length=220, variable=self.pop_size,
-                           command=lambda v: app.overlay.set_scale(float(v), save=False))
-        slider.pack(side="left", padx=6)
-        slider.bind("<ButtonRelease-1>", lambda e: app.save())
-        ttk.Label(size, text="(or drag the pop-up's bottom-right corner)", foreground="#666").pack(side="left")
-        app.overlay.on_scale = lambda s: self.pop_size.set(s)
-        row = ttk.Frame(pop)
-        row.pack(anchor="w", pady=(4, 0))
-        ttk.Label(row, text="Learned (hide):").pack(side="left")
-        learned = set(ov.get("learned", []))
-        self.learned = {}
-        for d in config.NOTE_DEFS:
-            var = tk.BooleanVar(value=d["button"] in learned)
-            self.learned[d["button"]] = var
-            ttk.Checkbutton(row, text=f"{d['label']} ({d['pitch']})", variable=var,
-                            command=self._learned_changed).pack(side="left", padx=(8, 0))
-
-        self.focus_on = tk.BooleanVar(value=app.cfg.get("focus_game_on_note", True))
-        ttk.Checkbutton(self, text="Bring Longshot to the front when a note is played (so your controller "
-                                   "works straight away)", variable=self.focus_on,
-                        command=self._focus_changed).pack(anchor="w", pady=(6, 0))
-
-        self.custom_btn = ttk.Button(self, text="▸ Custom mappings (advanced)", command=self._toggle_custom)
-        self.custom_btn.pack(anchor="w", pady=(6, 0))
-        self.custom = CustomMappings(self, app)
-
-        self.btn = ttk.Button(self, text="Start", command=self._toggle)
-        self.btn.pack(pady=10)
+        self.btn = ttk.Button(self, text="Start", command=self._toggle, width=18)
+        self.btn.pack(pady=(18, 6), ipady=8)
         self.gate = ttk.Label(self, text="stopped", font=MID)
         self.gate.pack()
         self.held = ttk.Label(self, text="", font=BIG, foreground="#16a")
         self.held.pack(pady=6)
+        self.pop_on = tk.BooleanVar(value=app.overlay.cfg.get("enabled", False))
+        ttk.Checkbutton(self, text="Show note fingerings over the game while the ocarina is up",
+                        variable=self.pop_on, command=self._pop_changed).pack(pady=(0, 4))
+        ttk.Label(self, text="Listening options, pop-up size, custom mappings and more are under "
+                             "More settings.", foreground="#666").pack(pady=(0, 8))
         self.log = tk.Text(self, height=10, state="disabled")
         self.log.pack(fill="both", expand=True)
 
-    def _extras_changed(self):
-        self.app.cfg["extras_when_away"] = self.extras_away.get()
-        self.app.save()
-        if self.app.engine:
-            self._log("Listening change applies next time you press Start.")
-
-    def _focus_changed(self):
-        self.app.cfg["focus_game_on_note"] = self.focus_on.get()
-        self.app.save()
-
-    def _toggle_custom(self):
-        if self.custom.frame.winfo_ismapped():
-            self.custom.frame.pack_forget()
-            self.custom_btn.config(text="▸ Custom mappings (advanced)")
-        else:
-            self.custom.frame.pack(fill="x", after=self.custom_btn, pady=(4, 0))
-            self.custom_btn.config(text="▾ Custom mappings (advanced)")
-
-    def on_readings(self, readings):
-        self.custom.on_readings(readings)
-
     def _pop_changed(self):
         self.app.overlay.set_enabled(self.pop_on.get())
-
-    def _learned_changed(self):
-        self.app.overlay.cfg["learned"] = [b for b, v in self.learned.items() if v.get()]
-        self.app.save()
-        self.app.overlay.refresh()
-
-    def _mode_changed(self):
-        self.app.cfg["gate_mode"] = self.mode.get()
-        self.app.save()
 
     def _toggle(self):
         if self.app.engine:
@@ -1001,6 +949,112 @@ class PlayTab(Tab):
                               f"   [{eng.gate_note}]")
         if last is not None:
             self.held.config(text=last.held or "")
+
+
+
+
+class PlayOptionsTab(Tab):
+    """More settings > Play options: when to listen, pop-up details, focus, custom mappings."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent, app)
+        mode = ttk.LabelFrame(self, text="When to listen", padding=8)
+        mode.pack(fill="x")
+        self.mode = tk.StringVar(value=app.cfg["gate_mode"])
+        for value, text in [("game", "Only while the ocarina is up in-game (recommended)"),
+                            ("hotkey", "While Scroll Lock is on"),
+                            ("always", "Always (testing only -- sounds can move your character)")]:
+            ttk.Radiobutton(mode, text=text, value=value, variable=self.mode,
+                            command=self._mode_changed).pack(anchor="w")
+        self.extras_away = tk.BooleanVar(value=app.cfg.get("extras_when_away", False))
+        ttk.Checkbutton(mode, text="Also listen for D-pad left and custom mappings while the ocarina is put "
+                                   "away (the mic stays on)", variable=self.extras_away,
+                        command=self._extras_changed).pack(anchor="w", pady=(4, 0))
+        self.focus_on = tk.BooleanVar(value=app.cfg.get("focus_game_on_note", True))
+        ttk.Checkbutton(mode, text="Bring Longshot to the front when a note is played (so your controller "
+                                   "works straight away)", variable=self.focus_on,
+                        command=self._focus_changed).pack(anchor="w", pady=(4, 0))
+
+        pop = ttk.LabelFrame(self, text="Fingering pop-up", padding=8)
+        pop.pack(fill="x", pady=(8, 0))
+        ov = app.overlay.cfg
+        ttk.Label(pop, text="Turn it on from the Play tab. Drag it to move it; Longshot must be windowed or "
+                            "borderless.", foreground="#666").pack(anchor="w")
+        size = ttk.Frame(pop)
+        size.pack(anchor="w", pady=(4, 0))
+        ttk.Label(size, text="Size:").pack(side="left")
+        self.pop_size = tk.DoubleVar(value=app.overlay.scale())
+        slider = ttk.Scale(size, from_=0.6, to=2.0, length=220, variable=self.pop_size,
+                           command=lambda v: app.overlay.set_scale(float(v), save=False))
+        slider.pack(side="left", padx=6)
+        slider.bind("<ButtonRelease-1>", lambda e: app.save())
+        ttk.Label(size, text="(or drag the pop-up's bottom-right corner)", foreground="#666").pack(side="left")
+        app.overlay.on_scale = lambda s: self.pop_size.set(s)
+        row = ttk.Frame(pop)
+        row.pack(anchor="w", pady=(4, 0))
+        ttk.Label(row, text="Learned (hide):").pack(side="left")
+        learned = set(ov.get("learned", []))
+        self.learned = {}
+        for d in config.NOTE_DEFS:
+            var = tk.BooleanVar(value=d["button"] in learned)
+            self.learned[d["button"]] = var
+            ttk.Checkbutton(row, text=f"{d['label']} ({d['pitch']})", variable=var,
+                            command=self._learned_changed).pack(side="left", padx=(8, 0))
+
+        self.custom_btn = ttk.Button(self, text="▸ Custom mappings (advanced)", command=self._toggle_custom)
+        self.custom_btn.pack(anchor="w", pady=(8, 0))
+        self.custom = CustomMappings(self, app)
+
+    def _note(self, text):
+        if self.app.engine:
+            self.app.tabs["Play"]._log(text)
+
+    def _mode_changed(self):
+        self.app.cfg["gate_mode"] = self.mode.get()
+        self.app.save()
+
+    def _extras_changed(self):
+        self.app.cfg["extras_when_away"] = self.extras_away.get()
+        self.app.save()
+        self._note("Listening change applies next time you press Start.")
+
+    def _focus_changed(self):
+        self.app.cfg["focus_game_on_note"] = self.focus_on.get()
+        self.app.save()
+
+    def _learned_changed(self):
+        self.app.overlay.cfg["learned"] = [b for b, v in self.learned.items() if v.get()]
+        self.app.save()
+        self.app.overlay.refresh()
+
+    def _toggle_custom(self):
+        if self.custom.frame.winfo_ismapped():
+            self.custom.frame.pack_forget()
+            self.custom_btn.config(text="▸ Custom mappings (advanced)")
+        else:
+            self.custom.frame.pack(fill="x", after=self.custom_btn, pady=(4, 0))
+            self.custom_btn.config(text="▾ Custom mappings (advanced)")
+
+    def on_readings(self, readings):
+        self.custom.on_readings(readings)
+
+
+class MoreTab(ttk.Frame):
+    """'More settings': a second row of tabs for everything most people never need."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent, padding=4)
+        self.app = app
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill="both", expand=True)
+
+    def add(self, name, cls):
+        tab = cls(self.nb, self.app)
+        self.nb.add(tab, text=name)
+        return tab
+
+    def current(self):
+        return self.nametowidget(self.nb.select())
 
 
 # ---- Game flag -----------------------------------------------------------
@@ -1185,7 +1239,7 @@ class AdvancedTab(Tab):
         super().__init__(parent, app)
         ttk.Label(self, wraplength=820, justify="left", foreground="#666", text=(
             "Faster = lower 'hold steady'. Fewer stray presses while a note starts = higher 'hold steady' or "
-            "lower 'within'. Changes apply next time you press Start / open the Test tab.")).pack(anchor="w")
+            "lower 'within'. Changes apply next time you press Start / open Practice.")).pack(anchor="w")
         grid = ttk.Frame(self)
         grid.pack(anchor="w", pady=8)
         self.vars = {}

@@ -18,7 +18,8 @@ Your real controller keeps working alongside it.
 
 > Tested with **Longshot v3.0.0-rc.3 and rc.5**. A Longshot update can move the in-game
 > flag the app reads; if the Setup tab then says the game flag isn't found, use
-> **Game Flag → Find it manually** (everything else keeps working).
+> **More settings → Game Flag → Find it manually** (everything else keeps
+> working).
 
 > Not affiliated with Nintendo or the Longshot project. You need your own copy
 > of Longshot; nothing from the game is included here.
@@ -55,9 +56,11 @@ code.
 
 ## First-time setup
 
-Open the app and work through the tabs from left to right. The **Setup** tab
-has a *Ready to play?* checklist with a fix-it button next to anything that
-isn't done yet.
+The app has three main tabs (**Setup**, **Calibrate** and **Play**), worked
+through left to right. Everything else is tucked away under **More
+settings**, and you don't need it to get going. The **Setup** tab has a
+*Ready to play?* checklist with a fix-it button next to anything that isn't
+done yet.
 
 1. **Setup**
    - Pick your microphone. The level bar should move when you play.
@@ -74,17 +77,19 @@ isn't done yet.
    - Start Longshot and load your save. Then click **Measure background
      noise** and stay quiet for 2 seconds, with the game running at your usual
      volume.
-   - Playing through TV or speakers instead of headphones? Leave **Game
-     sounds** on and pick the output the game plays through.
+   - Playing through TV or speakers instead of headphones? Game sounds are
+     filtered out by default; if the game plays through a different output
+     than Windows' default, pick it under **More settings → Sound & startup**.
 2. **Calibrate**: for each of the 5 notes, finger it as the picture shows,
    click *Record take* (or press Space) and play it. Do 3 takes per note, played
    the way you'd play in the game rather than your most careful note.
    - Optional: **D-pad left** is a sixth row. Record any pitch that isn't one
      of your five notes (e.g. a C) and that note presses D-pad left while the
      ocarina is up. For any other button, see *Custom mappings* below.
-3. **Test** (optional): play notes and practise songs without touching the
-   game.
-4. **Play**: click **Start**, take the ocarina out in Longshot and play.
+3. **Play**: click **Start**, take the ocarina out in Longshot and play.
+   Tick *Show note fingerings…* to get the pop-up while you learn.
+
+Want to practise without touching the game? **More settings → Practice**.
 
 That's it. Next time you only need to open the app and click Start, or let it
 start by itself (below).
@@ -102,40 +107,41 @@ start by itself (below).
 ## Features
 
 ### Listens only while the ocarina is up
-On the **Play** tab, *When to listen* defaults to **Only while the ocarina is
-up**. The app reads this from Longshot's memory, and the Setup checklist shows
+*When to listen* (**More settings → Play options**) defaults to **Only while
+the ocarina is up**. The app reads this from Longshot's memory, and the Setup checklist shows
 *"Game flag found automatically"* when it's working. If it ever can't find the
 flag (for example after a Longshot update), it switches to **Scroll Lock** and
-tells you, so it never silently stops working. You can then use **Game Flag →
-Find it manually** (see Troubleshooting).
+tells you, so it never silently stops working. You can then use **More
+settings → Game Flag → Find it manually** (see Troubleshooting).
 
 ### Fingering pop-up
-**Play → Fingering pop-up**: shows the fingering for each note over the game
+**Play → Show note fingerings…**: shows the fingering for each note over the game
 while the ocarina is up, styled to match the game's ocarina screen, and fades
 away when you lower it.
-- Drag it to move it. Drag its bottom-right corner, or use the Size slider, to
-  resize it.
-- Tick a note under **Learned (hide)** once you know it and it disappears from
-  the pop-up.
+- Drag it to move it. Drag its bottom-right corner to resize it.
+- Under **More settings → Play options**, tick a note under **Learned (hide)**
+  once you know it and it disappears from the pop-up.
 
 ### Start with Longshot
-**Setup → Start automatically when Longshot starts** adds the app to Windows
+**More settings → Sound & startup → Start automatically when Longshot
+starts** adds the app to Windows
 startup. It then waits hidden in the background. When Longshot starts, it
 appears and starts playing on its own; when Longshot closes, it hides again.
 
 ### Brings the game to the front
 When you play a note and Longshot isn't the active window, the app focuses it,
-so your controller works straight away. You can turn this off on the Play tab.
+so your controller works straight away. You can turn this off in **More
+settings → Play options**.
 
 ### Custom mappings (advanced)
-**Play → ▸ Custom mappings**: map any pitch to *any* controller input, such as
+**More settings → Play options → ▸ Custom mappings**: map any pitch to *any* controller input, such as
 the d-pad, sticks, triggers or Start.
 - **Hold**: pressed for as long as you hold the note.
 - **Timed**: pressed for a set time, with an optional delay. For example, one
   note pushes the left stick forward for 10 seconds.
 - To use them with the ocarina put away too, and try playing the whole
   game with an ocarina if you're brave enough, tick *Also listen for D-pad left
-  and custom mappings…* under **When to listen** on the Play tab. It's off by
+  and custom mappings…* under **When to listen** (same tab). It's off by
   default.
 - Set the pitch by typing it, picking a note name, or clicking **Listen** and
   playing it.
@@ -147,8 +153,8 @@ the d-pad, sticks, triggers or Start.
 | The game and the app both react to notes, or notes come out doubled | Turn off Longshot's own microphone input (Setup checklist, with Longshot closed) |
 | Nothing happens in game | Setup checklist: all ✔? Is Play started? Did you apply the bindings with Longshot **closed**? |
 | Notes only work when the game window is clicked | Setup → *Fix* on the background-input line (with Longshot closed) |
-| Wrong note, or notes trigger themselves | Re-measure background noise; recalibrate in the room and at the volume you play in; turn on *Game sounds* if you use speakers |
-| "Game flag not found" | Game Flag tab → *Find it manually*: follow the prompts (away / up / play) and click *Use this flag* |
+| Wrong note, or notes trigger themselves | Re-measure background noise; recalibrate in the room and at the volume you play in; check *More settings → Sound & startup → Game sounds* if you use speakers |
+| "Game flag not found" | More settings → Game Flag → *Find it manually*: follow the prompts (away / up / play) and click *Use this flag* |
 | Pop-up doesn't appear | Run Longshot windowed or borderless, not exclusive fullscreen |
 | A and B (or X and Y) seem swapped | The virtual pad assumes a Switch-style layout in Longshot. Open an issue with your setup. |
 

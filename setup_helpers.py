@@ -68,6 +68,8 @@ def other_instances():
         if pid in me or ppid in me:
             continue
         low = cmd.lower()
+        if WAIT_FLAG in low:
+            continue   # autostart copy waiting for Longshot: no controller, and it stands down if we're open
         if name.lower() == "ocarinatranslator.exe":
             found.append((pid, "OcarinaTranslator.exe"))
         elif "translator.py" in low or "ocarinatranslator\\app.py" in low or "flag_scan" in low:

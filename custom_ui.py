@@ -1,4 +1,4 @@
-"""Custom mappings editor (hidden section on the Play tab).
+"""Custom mappings editor (More settings > Play options).
 
 Map any pitch you can play to any controller input -- d-pad, sticks, triggers,
 Start, anything -- either held for as long as you hold the note, or for a set
@@ -109,7 +109,7 @@ class CustomMappings:
         of = ttk.Frame(ed)
         of.grid(row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
         ttk.Button(of, text="Save mapping", command=self._save).pack(side="left")
-        ttk.Label(of, text="To use mappings with the ocarina put away, turn that on in the Play tab.",
+        ttk.Label(of, text="To use mappings with the ocarina put away, turn that on above (When to listen).",
                   foreground="#666").pack(side="left", padx=10)
         self._refresh_list()
 
