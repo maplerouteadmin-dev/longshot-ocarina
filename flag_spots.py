@@ -38,3 +38,8 @@ OFFSETS = [
     0x113B8920FE,
     0x115BC401E7,
 ]
+
+# The Linux build of Longshot lays memory out differently. These need finding
+# with tools/arena_scan.py on Linux (see GitHub issue #1); until then Linux
+# users use the manual scan on the Game Flag tab.
+LINUX_OFFSETS = []

@@ -385,10 +385,11 @@ class SetupTab(Tab):
         running = st.get("running", False)
 
         if st.get("vigem"):
-            r["driver"].set(True, "Virtual controller driver (ViGEmBus) installed")
+            r["driver"].set(True, setup_helpers.DRIVER_OK_TEXT)
         else:
-            r["driver"].set(False, "ViGEmBus driver not installed -- needed to send notes to the game",
-                            "Get driver", lambda: webbrowser.open(setup_helpers.VIGEM_URL))
+            r["driver"].set(False, setup_helpers.DRIVER_MISSING_TEXT,
+                            "Get driver" if setup_helpers.IS_WINDOWS else "How to fix",
+                            lambda: webbrowser.open(setup_helpers.DRIVER_URL))
 
         if not st.get("ini"):
             r["bindings"].set(False, "Couldn't find Longshot's settings file (longshot_options.ini)",
@@ -908,7 +909,7 @@ class PlayTab(Tab):
             messagebox.showwarning("Ocarina Translator", "Calibrate your notes first (Calibrate tab).")
             return
         if not setup_helpers.vigem_installed():
-            messagebox.showwarning("Ocarina Translator", "Install the ViGEmBus driver first (Setup tab).")
+            messagebox.showwarning("Ocarina Translator", "Set up the virtual controller first (Setup tab checklist).")
             return
         self.app.stop_monitor()
         try:

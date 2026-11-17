@@ -3,23 +3,52 @@
 Focusing the game when a note is played means that if you'd clicked into
 another window, your real controller is ready to go again straight away.
 """
-import ctypes
-import ctypes.wintypes as wt
+import shutil
+import subprocess
+import sys
 import time
 
-from ocarina_flag import PROCESS_NAME
+import procmem
 
-_u32 = ctypes.windll.user32
-_k32 = ctypes.windll.kernel32
+IS_WINDOWS = sys.platform == "win32"
 _last_focus = 0.0
+
+if IS_WINDOWS:
+    import ctypes
+    import ctypes.wintypes as wt
+    _u32 = ctypes.windll.user32
+    _k32 = ctypes.windll.kernel32
 
 
 def _game_pid():
+    proc = procmem.open_game()
+    return proc.process_id if proc else None
+
+
+def _xdotool(*args):
+    """Run xdotool (X11 only; Wayland doesn't allow this). Returns stdout or None."""
+    if not shutil.which("xdotool"):
+        return None
     try:
-        import pymem
-        return pymem.Pymem(PROCESS_NAME).process_id
+        return subprocess.run(["xdotool", *args], capture_output=True, text=True, timeout=2).stdout
     except Exception:
         return None
+
+
+def _game_window_linux(pid):
+    out = _xdotool("search", "--onlyvisible", "--pid", str(pid))
+    wins = [w for w in (out or "").split() if w.isdigit()]
+    best = None
+    for w in wins:
+        geo = _xdotool("getwindowgeometry", "--shell", w) or ""
+        vals = dict(line.split("=", 1) for line in geo.splitlines() if "=" in line)
+        try:
+            x, y, wd, ht = (int(vals[k]) for k in ("X", "Y", "WIDTH", "HEIGHT"))
+        except (KeyError, ValueError):
+            continue
+        if best is None or wd * ht > best[0]:
+            best = (wd * ht, int(w), (x, y, x + wd, y + ht))
+    return (best[1], best[2]) if best else (None, None)
 
 
 def game_window(pid=None):
@@ -27,6 +56,8 @@ def game_window(pid=None):
     pid = pid or _game_pid()
     if not pid:
         return None, None
+    if not IS_WINDOWS:
+        return _game_window_linux(pid)
     best = []
 
     @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
@@ -56,7 +87,13 @@ def focus_game(min_interval=0.5):
         return
     _last_focus = now
     hwnd, _ = game_window()
-    if not hwnd or _u32.GetForegroundWindow() == hwnd:
+    if not hwnd:
+        return
+    if not IS_WINDOWS:
+        if (_xdotool("getactivewindow") or "").strip() != str(hwnd):
+            _xdotool("windowactivate", str(hwnd))
+        return
+    if _u32.GetForegroundWindow() == hwnd:
         return
     if _u32.IsIconic(hwnd):
         _u32.ShowWindow(hwnd, 9)   # SW_RESTORE

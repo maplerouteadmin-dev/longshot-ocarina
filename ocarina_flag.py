@@ -1,9 +1,11 @@
 """Reads Longshot's "ocarina is up" flag from process memory.
 
 Longshot runs the game in an emulated console whose memory is one huge private
-reservation in longshot.exe (the "arena"). Game variables sit at fixed offsets
-inside it, so the flag survives restarts: we read the offsets in flag_spots.py
-(found by arena_scan.py) and take the majority (1 = up, 0 = put away).
+reservation in the game process (the "arena"). Game variables sit at fixed
+offsets inside it, so the flag survives restarts: we read the offsets in
+flag_spots.py (found by tools/arena_scan.py) and take the majority (1 = up,
+0 = put away). The Windows and Linux builds lay memory out differently, so each
+has its own offsets; Linux ones haven't been found yet (see the GitHub issue).
 
 If that fails (e.g. a Longshot update moved things), the raw heap address saved
 by the Game Flag scan (flag_scan.py) is used instead; that one moves on every
@@ -13,38 +15,21 @@ read() distinguishes "down" from "can't tell" (game not running, unreadable, or
 no clear majority) so the engine can fall back to the hotkey instead of
 silently never listening.
 """
-import ctypes
-import ctypes.wintypes as wt
+import procmem
+from flag_spots import LINUX_OFFSETS, OFFSETS
 
-import pymem
-
-from flag_spots import OFFSETS
-
-PROCESS_NAME = "longshot.exe"
+PROCESS_NAME = procmem.PROCESS_NAMES[0]
 SPOT_UP, SPOT_DOWN = 1, 0
 MIN_ARENA = 0x1000000000          # the arena is a >= 64 GB reservation
+PLATFORM_OFFSETS = OFFSETS if procmem.IS_WINDOWS else LINUX_OFFSETS
 
 
-class _MBI(ctypes.Structure):
-    _fields_ = [("BaseAddress", ctypes.c_ulonglong), ("AllocationBase", ctypes.c_ulonglong),
-                ("AllocationProtect", wt.DWORD), ("PartitionId", wt.WORD),
-                ("RegionSize", ctypes.c_ulonglong), ("State", wt.DWORD),
-                ("Protect", wt.DWORD), ("Type", wt.DWORD)]
-
-
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_k32.VirtualQueryEx.argtypes = [wt.HANDLE, ctypes.c_void_p, ctypes.POINTER(_MBI), ctypes.c_size_t]
-_k32.VirtualQueryEx.restype = ctypes.c_size_t
-
-
-def find_arena(handle):
+def find_arena(proc):
     """Base of the biggest private reservation (the emulated console memory), or None."""
-    sizes, addr, m = {}, 0, _MBI()
-    while addr < 0x7FFFFFFFFFFF and _k32.VirtualQueryEx(handle, ctypes.c_void_p(addr), ctypes.byref(m),
-                                                        ctypes.sizeof(m)):
-        if m.State != 0x10000 and m.Type == 0x20000:
-            sizes[m.AllocationBase] = sizes.get(m.AllocationBase, 0) + m.RegionSize
-        addr = m.BaseAddress + m.RegionSize
+    sizes = {}
+    for r in proc.regions():
+        if r.private:
+            sizes[r.alloc_base] = sizes.get(r.alloc_base, 0) + r.size
     if not sizes:
         return None
     base, size = max(sizes.items(), key=lambda kv: kv[1])
@@ -56,24 +41,21 @@ class GameFlag:
         self.address = address            # raw fallback from the scan
         self.up_value = up_value
         self.down_value = down_value
-        self.offsets = OFFSETS if offsets is None else offsets
+        self.offsets = PLATFORM_OFFSETS if offsets is None else offsets
         self._pm = None
         self._arena = None
         self.last_raw = None
         self.via_chains = False           # True when the last read used the arena spots ("automatic")
 
     def _attach(self):
-        try:
-            pm = pymem.Pymem(PROCESS_NAME)
-        except Exception:
-            self._pm = None
-            return None
-        self._pm = pm
-        try:
-            self._arena = find_arena(pm.process_handle)
-        except Exception:
-            self._arena = None
-        return pm
+        self._pm = procmem.open_game()
+        self._arena = None
+        if self._pm is not None and self.offsets:
+            try:
+                self._arena = find_arena(self._pm)
+            except Exception:
+                self._arena = None
+        return self._pm
 
     def _vote(self):
         """1/0 when a clear majority of the arena spots agree, else None."""
@@ -104,7 +86,7 @@ class GameFlag:
             return None
         if self._arena and self.offsets:
             v = self._vote()
-            if v is None and not self._process_alive():
+            if v is None and not self._pm.alive():
                 pm = self._attach()       # Longshot restarted: find the new arena
                 v = self._vote() if pm and self._arena else None
             if v is not None:
@@ -130,18 +112,6 @@ class GameFlag:
             return False
         return None
 
-    def _process_alive(self):
-        try:
-            code = wt.DWORD()
-            ctypes.windll.kernel32.GetExitCodeProcess(self._pm.process_handle, ctypes.byref(code))
-            return code.value == 259    # STILL_ACTIVE
-        except Exception:
-            return False
-
 
 def game_running():
-    try:
-        pymem.Pymem(PROCESS_NAME)
-        return True
-    except Exception:
-        return False
+    return procmem.game_running()

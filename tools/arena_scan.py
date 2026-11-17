@@ -12,24 +12,23 @@ State lives in the scratch dir given by ARENA_DIR (default: .\\arena_state).
 """
 import ctypes, json, os, sys
 import numpy as np
-import pymem
-from flag_probe import MBI, k32
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the app's modules
+import procmem  # noqa: E402
 
 STATE = os.environ.get("ARENA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "arena_state"))
 CHUNK = 64 << 20
 MIN_RESERVE = 0x1000000000          # the guest arena is a huge (>=64 GB) private reservation
 
 
-def arena(h):
-    """(base, [(region_base, size)]) of the biggest private reservation's committed RW regions."""
-    allocs, addr, m = {}, 0, MBI()
-    while addr < 0x7FFFFFFFFFFF and k32.VirtualQueryEx(h, ctypes.c_void_p(addr), ctypes.byref(m), ctypes.sizeof(m)):
-        if m.State != 0x10000:
-            a = allocs.setdefault(m.AllocationBase, [0, []])
-            a[0] += m.RegionSize
-            if m.State == 0x1000 and m.Type == 0x20000 and m.Protect == 0x04:
-                a[1].append((m.BaseAddress, m.RegionSize))
-        addr = m.BaseAddress + m.RegionSize
+def arena(proc):
+    """(base, [(region_base, size)]) of the biggest reservation's committed, writable, private regions.
+    Works on Windows and Linux (via procmem)."""
+    allocs = {}
+    for r in proc.regions():
+        a = allocs.setdefault(r.alloc_base, [0, []])
+        a[0] += r.size
+        if r.committed and r.private and r.writable:
+            a[1].append((r.base, r.size))
     base, (size, regs) = max(allocs.items(), key=lambda kv: kv[1][0])
     assert size >= MIN_RESERVE, "no guest arena found"
     return base, regs
@@ -44,8 +43,8 @@ def chunks(regs):
 def main():
     cmd = sys.argv[1]
     os.makedirs(STATE, exist_ok=True)
-    pm = pymem.Pymem("longshot.exe")
-    base, regs = arena(pm.process_handle)
+    pm = procmem.Process()
+    base, regs = arena(pm)
     cand_path = os.path.join(STATE, "cands.npy")
     if cmd == "report" or cmd == "test":
         offs = np.load(cand_path)

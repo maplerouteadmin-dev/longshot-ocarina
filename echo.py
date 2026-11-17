@@ -66,8 +66,10 @@ class GameAudio:
 
     def _run(self):
         try:
-            import ctypes
-            ctypes.windll.ole32.CoInitializeEx(None, 0)  # soundcard only inits COM on the importing thread
+            import sys
+            if sys.platform == "win32":
+                import ctypes
+                ctypes.windll.ole32.CoInitializeEx(None, 0)  # soundcard only inits COM on the importing thread
             import soundcard as sc
             mic = sc.get_microphone(id=str(self.device_name), include_loopback=True)
         except Exception as e:

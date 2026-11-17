@@ -30,7 +30,7 @@ Your real controller keeps working alongside it.
 
 | | |
 |---|---|
-| **PC** | Windows 10 or 11 |
+| **PC** | Windows 10 or 11 (Linux: experimental, see below) |
 | **Game** | Longshot, run **windowed or borderless** (needed for the fingering pop-up) |
 | **Ocarina** | A 12-hole Alto C ocarina. We built and tested everything with this 3D-printed one: [Printables model #474058](https://www.printables.com/model/474058). Others work, but the fingering pictures assume a 12-hole Alto C. |
 | **Microphone** | Any mic; a headset or webcam mic is fine |
@@ -146,6 +146,48 @@ the d-pad, sticks, triggers or Start.
 - Set the pitch by typing it, picking a note name, or clicking **Listen** and
   playing it.
 
+## Linux (experimental)
+
+The app has Linux support, but it has **not been tested on a real Linux
+machine yet**. If you try it, please report back on
+[issue #1](https://github.com/maplerouteadmin-dev/longshot-ocarina/issues/1).
+
+Run it from source (there's no Linux download yet):
+
+```bash
+sudo apt install python3-tk python3-venv xdotool      # or your distro's equivalents
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+One-time permissions:
+
+- **Virtual controller:** the app creates an Xbox-style pad through
+  `/dev/uinput`. Allow your user to do that, then log out and back in:
+  ```bash
+  echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/60-ocarina-uinput.rules
+  sudo usermod -aG input $USER
+  ```
+- **Reading the ocarina flag:** most distros only let a program read
+  another's memory if it started it. Either allow it until the next reboot
+  with `sudo sysctl kernel.yama.ptrace_scope=0`, or give Python (or the built
+  app) the permission with `sudo setcap cap_sys_ptrace=eip <path>`.
+
+What to expect:
+
+- **Mic, calibration, notes and the virtual pad:** should work like on
+  Windows.
+- **Ocarina flag:** the automatic lookup isn't set up for the Linux build yet,
+  so use **More settings → Game Flag → Find it manually** after each Longshot
+  restart. Running `tools/arena_scan.py` on Linux (see
+  `tools/FLAG_POINTER_NOTES.md`) would let us add automatic lookup.
+- **Fingering pop-up and bringing the game to the front:** X11 only (needs
+  `xdotool`). Wayland doesn't allow either, so on Wayland, including Steam
+  Deck gaming mode, the pop-up may not show.
+- **Start with Longshot:** adds `~/.config/autostart/ocarina-translator.desktop`.
+- **Build a single-file binary:** `./build_linux.sh`.
+
 ## Troubleshooting
 
 | Problem | Try |
@@ -198,11 +240,13 @@ python app.py
 | `tools/` | developer tools used to find the flag (`arena_scan.py`, `ptrscan.py`, `flag_probe.py`) and notes |
 | `version.py` | the app version shown in the title bar |
 | `overlay.py` | fingering pop-up |
-| `custom_ui.py`, `gamepad.py`, `gamewin.py` | custom mappings, virtual pad, game window focus |
+| `custom_ui.py`, `gamewin.py` | custom mappings, game window focus |
+| `gamepad.py` (`gamepad_win.py` / `gamepad_linux.py`) | virtual pad: ViGEmBus on Windows, uinput on Linux |
+| `procmem.py` | finding Longshot and reading its memory on Windows and Linux |
 | `setup_helpers.py` | driver check, Longshot ini settings, autostart |
 | `calibration.py`, `fingering.py`, `diagram.py` | calibration and fingering charts |
 | `translator.py`, `calibrate.py` | older command-line versions |
-| `build.bat` | builds the exe |
+| `build.bat`, `build_linux.sh` | build the Windows exe / Linux binary |
 
 ## License
 

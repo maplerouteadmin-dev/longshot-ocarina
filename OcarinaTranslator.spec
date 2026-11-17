@@ -21,7 +21,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['scipy', 'matplotlib', 'pandas'],
+    excludes=['evdev', 'gamepad_linux', 'scipy', 'matplotlib', 'pandas'],
     noarchive=False,
     optimize=0,
 )

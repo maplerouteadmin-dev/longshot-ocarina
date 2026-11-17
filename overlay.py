@@ -11,7 +11,7 @@ Only notes not marked as learned are shown (config "overlay": {"enabled",
 "learned": [buttons], "fx", "fy"}). Longshot must be windowed or borderless.
 """
 import ctypes
-import ctypes.wintypes as wt
+import sys
 import threading
 import time
 import tkinter as tk
@@ -20,7 +20,8 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import config
 import fingering
-from ocarina_flag import GameFlag, PROCESS_NAME
+import gamewin
+from ocarina_flag import GameFlag
 
 GAME_ORDER = ["LB", "RB", "X", "Y", "B"]       # order of the game's own note prompt
 KEY = "#0b0c0e"                                # transparent key colour (close to the panel, hides AA fringe)
@@ -122,32 +123,12 @@ def render_panel(notes, profile, scale=1.0):
 
 
 # ---- Longshot's window ------------------------------------------------------
-_u32 = ctypes.windll.user32
+IS_WINDOWS = sys.platform == "win32"
 
 
 def game_window_rect():
-    """(left, top, right, bottom) of Longshot's biggest visible window, or None."""
-    try:
-        import pymem
-        pid = pymem.Pymem(PROCESS_NAME).process_id
-    except Exception:
-        return None
-    best = []
-
-    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
-    def cb(hwnd, _):
-        p = wt.DWORD()
-        _u32.GetWindowThreadProcessId(hwnd, ctypes.byref(p))
-        if p.value == pid and _u32.IsWindowVisible(hwnd):
-            r = wt.RECT()
-            _u32.GetWindowRect(hwnd, ctypes.byref(r))
-            area = (r.right - r.left) * (r.bottom - r.top)
-            if area > 0:
-                best.append((area, (r.left, r.top, r.right, r.bottom)))
-        return True
-
-    _u32.EnumWindows(cb, 0)
-    return max(best)[1] if best else None
+    """(left, top, right, bottom) of Longshot's window, or None (Linux: X11 with xdotool only)."""
+    return gamewin.game_window()[1]
 
 
 class FingeringOverlay:
@@ -234,7 +215,8 @@ class FingeringOverlay:
         self.win.configure(bg=KEY)
         self.win.attributes("-topmost", True)
         self.win.attributes("-alpha", 0.0)
-        self.win.attributes("-transparentcolor", KEY)
+        if IS_WINDOWS:    # rounded corners: Windows-only colour key; elsewhere the corners stay dark
+            self.win.attributes("-transparentcolor", KEY)
         self.label = tk.Label(self.win, bg=KEY, bd=0)
         self.label.pack()
         for w in (self.win, self.label):
@@ -245,9 +227,10 @@ class FingeringOverlay:
                 cursor="size_nw_se" if self._in_grip(e) else "fleur"))
         self.win.update_idletasks()
         try:   # never take focus from the game; stay out of the taskbar and alt-tab
-            hwnd = _u32.GetParent(self.win.winfo_id()) or self.win.winfo_id()
-            style = _u32.GetWindowLongW(hwnd, -20)
-            _u32.SetWindowLongW(hwnd, -20, style | 0x08000000 | 0x00000080)
+            u32 = ctypes.windll.user32
+            hwnd = u32.GetParent(self.win.winfo_id()) or self.win.winfo_id()
+            style = u32.GetWindowLongW(hwnd, -20)
+            u32.SetWindowLongW(hwnd, -20, style | 0x08000000 | 0x00000080)
         except Exception:
             pass
 
