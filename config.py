@@ -18,6 +18,14 @@ NOTE_DEFS = [
     {"button": "Y", "label": "C-Up", "pitch": "D6", "ini_note": "pad_note_x", "ini_src": "pad_x"},
 ]
 
+# Optional extra notes, calibrated on the same tab as the ocarina notes. They
+# aren't ocarina notes in-game (no ini slot, no fingering chart): pick any pitch
+# that isn't one of the five above. They work whether the ocarina is up or put away.
+EXTRA_DEFS = [
+    {"button": "DLEFT", "label": "D-pad left", "pitch": None},
+]
+CALIBRATE_DEFS = NOTE_DEFS + EXTRA_DEFS
+
 SONGS = {
     "Zelda's Lullaby": ["X", "Y", "B", "X", "Y", "B"],
     "Epona's Song": ["Y", "X", "B", "Y", "X", "B"],
@@ -54,7 +62,7 @@ DEFAULTS = {
     "game_sound_filter": {"enabled": True, "device": ""},
     # fingering pop-up over the game while the ocarina is up; learned = buttons to hide
     "overlay": {"enabled": False, "learned": [], "x": None, "y": None},
-    "focus_game_on_note": True,   # bring Longshot to the front when a note is played
+    "focus_game_on_note": True,
     # extra pitch -> any controller input mappings (Play tab > Custom mappings)
     "custom": [],
 }

@@ -34,6 +34,7 @@ SLOT_BUTTONS = {
     "B": XUSB.XUSB_GAMEPAD_B,
     "X": XUSB.XUSB_GAMEPAD_X,
     "Y": XUSB.XUSB_GAMEPAD_Y,
+    "DLEFT": XUSB.XUSB_GAMEPAD_DPAD_LEFT,    # optional extra note (config.EXTRA_DEFS)
 }
 
 _gamepad = None

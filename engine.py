@@ -142,9 +142,11 @@ class Engine:
         self.mic_label = name
         self.analyzer = audio.Analyzer(idx, sr)
         customs = {f"custom:{i}": m for i, m in enumerate(self.cfg.get("custom", []))
-                   if m.get("enabled", True) and m.get("hz") and m.get("input")}
-        self.free_keys = {k for k, m in customs.items() if m.get("when_away", True)}
+                   if m.get("hz") and m.get("input")}
+        self.free_keys = set(customs)       # custom mappings work with the ocarina up or put away
         notes = dict(config.note_freqs(self.cfg))
+        # extra notes (D-pad left) work whether the ocarina is up or put away
+        self.free_keys |= {d["button"] for d in config.EXTRA_DEFS if d["button"] in notes}
         notes.update({k: float(m["hz"]) for k, m in customs.items()})
         self.matcher = NoteMatcher(notes, config.match_params(self.cfg))
         self.flag = GameFlag(**self.cfg["flag"])
@@ -237,7 +239,7 @@ class Engine:
                     self.analyzer.drain()
                     self._emit(("gate", True, self.gate_note))
 
-            # custom mappings marked "works with the ocarina put away" keep listening
+            # custom mappings and extra notes keep listening with the ocarina put away
             active = listening or bool(self.free_keys)
             readings = self.analyzer.drain()
             if not active:
@@ -256,7 +258,7 @@ class Engine:
                                 self._focus()
                             else:
                                 self.custom.release(key, now)
-                    elif listening:
+                    elif listening or key in self.free_keys:
                         (self.out.press if kind == "press" else self.out.release)(key, now)
                 self._emit(("reading", d))
             if self.inject:

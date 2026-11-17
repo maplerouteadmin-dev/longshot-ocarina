@@ -79,6 +79,10 @@ isn't done yet.
 2. **Calibrate**: for each of the 5 notes, finger it as the picture shows,
    click *Record take* (or press Space) and play it. Do 3 takes per note, played
    the way you'd play in the game rather than your most careful note.
+   - Optional: **D-pad left** is a sixth row. Record any pitch that isn't one
+     of your five notes (e.g. a C) and that note presses D-pad left, with the
+     ocarina up or put away. For any other button, see *Custom mappings*
+     below.
 3. **Test** (optional): play notes and practise songs without touching the
    game.
 4. **Play**: click **Start**, take the ocarina out in Longshot and play.
@@ -130,7 +134,7 @@ the d-pad, sticks, triggers or Start.
 - **Hold**: pressed for as long as you hold the note.
 - **Timed**: pressed for a set time, with an optional delay. For example, one
   note pushes the left stick forward for 10 seconds.
-- Optionally works with the ocarina put away, so you can play the whole game
+- Works with the ocarina put away too, so you can try playing the whole game
   with an ocarina if you're brave enough.
 - Set the pitch by typing it, picking a note name, or clicking **Listen** and
   playing it.

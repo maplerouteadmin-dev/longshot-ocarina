@@ -108,9 +108,9 @@ class CustomMappings:
         r += 1
         of = ttk.Frame(ed)
         of.grid(row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(of, text="Works with the ocarina put away", variable=self.v_away).pack(side="left")
-        ttk.Checkbutton(of, text="Enabled", variable=self.v_on).pack(side="left", padx=10)
-        ttk.Button(of, text="Save mapping", command=self._save).pack(side="left", padx=10)
+        ttk.Button(of, text="Save mapping", command=self._save).pack(side="left")
+        ttk.Label(of, text="Mappings work whether the ocarina is up or put away.",
+                  foreground="#666").pack(side="left", padx=10)
         self._refresh_list()
 
     # -- list ------------------------------------------------------------------
@@ -184,7 +184,7 @@ class CustomMappings:
             "name": self.v["name"].get().strip() or "Mapping", "hz": round(hz, 2), "input": self.v["input"].get(),
             "x": round(self.v_x.get(), 2), "y": round(self.v_y.get(), 2), "amount": round(self.v_amt.get(), 2),
             "mode": self.v_mode.get(), "seconds": max(0.05, seconds), "delay": max(0.0, delay),
-            "when_away": self.v_away.get(), "enabled": self.v_on.get()}
+            "when_away": True, "enabled": True}
         self.app.save()
         self._refresh_list(select=self.sel)
         if self.app.engine:

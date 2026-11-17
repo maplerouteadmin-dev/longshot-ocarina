@@ -630,7 +630,7 @@ class CalibrateTab(Tab):
         ttk.Button(row, text="Save note", command=self._save_note).pack(side="left")
         self.rec_lbl = ttk.Label(right, font=MID)
         self.rec_lbl.pack()
-        self.takes_lbl = ttk.Label(right)
+        self.takes_lbl = ttk.Label(right, wraplength=420, justify="center")
         self.takes_lbl.pack()
         self.warn_lbl = ttk.Label(self, foreground="#b00", wraplength=820, justify="left")
         self.warn_lbl.pack(fill="x")
@@ -643,15 +643,16 @@ class CalibrateTab(Tab):
         self.tree.selection_set(self.tree.get_children()[0])
 
     def _defs(self):
-        return {d["button"]: d for d in config.NOTE_DEFS}
+        return {d["button"]: d for d in config.CALIBRATE_DEFS}
 
     def _fill(self):
         sel = self.tree.selection()
         self.tree.delete(*self.tree.get_children())
-        for d in config.NOTE_DEFS:
+        for d in config.CALIBRATE_DEFS:
             n = self.app.cfg["notes"].get(d["button"], {})
             self.tree.insert("", "end", iid=d["button"], values=(
-                f"{d['button']}  {d['label']}", d["pitch"],
+                f"{d['button']}  {d['label']}" if d["pitch"] else f"{d['label']}  (optional)",
+                d["pitch"] or "any",
                 f"{n['hz']:.1f} Hz" if n.get("hz") else "--",
                 f"{n.get('spread_cents', 0):.0f}¢" if n.get("hz") else "",
                 len(n.get("takes", [])) if n.get("hz") else ""))
@@ -667,6 +668,15 @@ class CalibrateTab(Tab):
     def _select(self):
         d = self._current()
         if not d:
+            return
+        if not d["pitch"]:   # optional extra input: no fingering chart, any pitch you like
+            self.photo = None
+            self.img_lbl.config(image="")
+            self.finger_note.config(text=f"{d['label']}: play any note that isn't one of your five ocarina "
+                                         "notes (e.g. a C or G), then record it like the others. Leave it "
+                                         "uncalibrated if you don't want it. It works with the ocarina up or "
+                                         "put away.")
+            self._show_takes()
             return
         path = os.path.join(diagram.OUT_DIR, f"{d['pitch']}.png")
         if not os.path.exists(path):
