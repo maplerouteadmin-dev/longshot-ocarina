@@ -80,9 +80,8 @@ isn't done yet.
    click *Record take* (or press Space) and play it. Do 3 takes per note, played
    the way you'd play in the game rather than your most careful note.
    - Optional: **D-pad left** is a sixth row. Record any pitch that isn't one
-     of your five notes (e.g. a C) and that note presses D-pad left, with the
-     ocarina up or put away. For any other button, see *Custom mappings*
-     below.
+     of your five notes (e.g. a C) and that note presses D-pad left while the
+     ocarina is up. For any other button, see *Custom mappings* below.
 3. **Test** (optional): play notes and practise songs without touching the
    game.
 4. **Play**: click **Start**, take the ocarina out in Longshot and play.
@@ -134,10 +133,10 @@ the d-pad, sticks, triggers or Start.
 - **Hold**: pressed for as long as you hold the note.
 - **Timed**: pressed for a set time, with an optional delay. For example, one
   note pushes the left stick forward for 10 seconds.
-- Works with the ocarina put away too, so you can try playing the whole game
-  with an ocarina if you're brave enough. Don't want the mic listening while
-  the ocarina is away? Untick *Also listen for D-pad left and custom
-  mappings…* under **When to listen** on the Play tab.
+- To use them with the ocarina put away too, and try playing the whole
+  game with an ocarina if you're brave enough, tick *Also listen for D-pad left
+  and custom mappings…* under **When to listen** on the Play tab. It's off by
+  default.
 - Set the pitch by typing it, picking a note name, or clicking **Listen** and
   playing it.
 

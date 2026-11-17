@@ -674,8 +674,8 @@ class CalibrateTab(Tab):
             self.img_lbl.config(image="")
             self.finger_note.config(text=f"{d['label']}: play any note that isn't one of your five ocarina "
                                          "notes (e.g. a C or G), then record it like the others. Leave it "
-                                         "uncalibrated if you don't want it. It also works with the ocarina put "
-                                         "away unless you turn that off on the Play tab.")
+                                         "uncalibrated if you don't want it. To use it with the ocarina put away "
+                                         "too, turn that on in the Play tab.")
             self._show_takes()
             return
         path = os.path.join(diagram.OUT_DIR, f"{d['pitch']}.png")
@@ -857,7 +857,7 @@ class PlayTab(Tab):
                             ("always", "Always (testing only -- sounds can move your character)")]:
             ttk.Radiobutton(mode, text=text, value=value, variable=self.mode,
                             command=self._mode_changed).pack(anchor="w")
-        self.extras_away = tk.BooleanVar(value=app.cfg.get("extras_when_away", True))
+        self.extras_away = tk.BooleanVar(value=app.cfg.get("extras_when_away", False))
         ttk.Checkbutton(mode, text="Also listen for D-pad left and custom mappings while the ocarina is put "
                                    "away (the mic stays on)", variable=self.extras_away,
                         command=self._extras_changed).pack(anchor="w", pady=(4, 0))
