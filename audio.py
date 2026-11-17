@@ -26,7 +26,9 @@ def input_devices():
         devices = sd.query_devices()
     except Exception:
         return []
-    order = {"Windows WASAPI": 0, "Windows DirectSound": 1, "MME": 2}
+    # Windows: prefer WASAPI. Linux/macOS: take whatever PortAudio offers (PulseAudio/PipeWire, ALSA, JACK).
+    order = {"Windows WASAPI": 0, "Windows DirectSound": 1, "MME": 2,
+             "PulseAudio": 0, "ALSA": 1, "JACK Audio Connection Kit": 2, "Core Audio": 0}
     seen, out = set(), []
     candidates = []
     for i, d in enumerate(devices):
@@ -34,7 +36,9 @@ def input_devices():
             continue
         api = hostapis[d["hostapi"]]["name"]
         if api not in order:
-            continue
+            if api.startswith("Windows") or api == "MME":
+                continue
+            order[api] = 5
         candidates.append((order[api], i, d["name"], int(d["default_samplerate"])))
     for _, i, name, sr in sorted(candidates):
         key = name[:28].lower()  # MME truncates names to ~31 chars

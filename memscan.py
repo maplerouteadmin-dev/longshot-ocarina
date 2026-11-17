@@ -9,62 +9,23 @@ textures/assets) regions under a size cap, since a small state flag won't
 live inside a huge texture buffer and scanning all ~15GB+ of this process
 would be impractically slow.
 """
-import ctypes
-from ctypes import wintypes
 import numpy as np
-import pymem
+
+import procmem
 
 MAX_REGION_SIZE = 64 * 1024 * 1024  # skip anything bigger than 64MB per region
-MEM_COMMIT = 0x1000
-MEM_PRIVATE = 0x20000
-PAGE_READWRITE = 0x04
-PAGE_WRITECOPY = 0x08
-PAGE_EXECUTE_READWRITE = 0x40
-PAGE_EXECUTE_WRITECOPY = 0x80
-WRITABLE_PROTECT = {PAGE_READWRITE, PAGE_WRITECOPY, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY}
 
 
-class MEMORY_BASIC_INFORMATION(ctypes.Structure):
-    _fields_ = [
-        ("BaseAddress", ctypes.c_void_p),
-        ("AllocationBase", ctypes.c_void_p),
-        ("AllocationProtect", wintypes.DWORD),
-        ("RegionSize", ctypes.c_size_t),
-        ("State", wintypes.DWORD),
-        ("Protect", wintypes.DWORD),
-        ("Type", wintypes.DWORD),
-    ]
-
-
-def attach(process_name="longshot.exe"):
-    pm = pymem.Pymem(process_name)
-    print(f"Attached to {process_name}, pid={pm.process_id}")
+def attach(process_name=None):
+    pm = procmem.Process() if process_name is None else procmem.Process((process_name,))
+    print(f"Attached to Longshot, pid={pm.process_id}")
     return pm
 
 
 def list_writable_regions(pm):
-    kernel32 = ctypes.windll.kernel32
-    handle = pm.process_handle
-    address = 0
-    mbi = MEMORY_BASIC_INFORMATION()
-    regions = []
-    while True:
-        res = kernel32.VirtualQueryEx(handle, ctypes.c_void_p(address), ctypes.byref(mbi), ctypes.sizeof(mbi))
-        if res == 0:
-            break
-        if (
-            mbi.State == MEM_COMMIT
-            and mbi.Type == MEM_PRIVATE
-            and mbi.Protect in WRITABLE_PROTECT
-            and 0 < mbi.RegionSize <= MAX_REGION_SIZE
-        ):
-            regions.append((mbi.BaseAddress, mbi.RegionSize))
-        address += mbi.RegionSize if mbi.RegionSize else 0x1000
-        if address <= 0:
-            break
-        if address > 0x7FFFFFFFFFFF:
-            break
-    return regions
+    """Committed, writable, private (heap-like) regions up to MAX_REGION_SIZE: [(base, size)]."""
+    return [(r.base, r.size) for r in pm.regions()
+            if r.committed and r.private and r.writable and 0 < r.size <= MAX_REGION_SIZE]
 
 
 def snapshot(pm, regions):

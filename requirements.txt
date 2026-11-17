@@ -1,7 +1,10 @@
 numpy
 sounddevice
 soundcard
-vgamepad
-pymem
 pillow
 pyinstaller
+# Windows: virtual controller (needs the ViGEmBus driver) and reading Longshot's memory
+vgamepad; sys_platform == "win32"
+pymem; sys_platform == "win32"
+# Linux (experimental): virtual controller through uinput
+evdev; sys_platform == "linux"

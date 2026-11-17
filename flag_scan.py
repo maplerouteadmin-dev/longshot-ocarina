@@ -16,9 +16,9 @@ only on/off-style bytes (0<->1) are kept, so it converges in a few cycles.
 import time
 
 import numpy as np
-import pymem
 
 import memscan
+import procmem
 from ocarina_flag import PROCESS_NAME
 
 
@@ -34,7 +34,7 @@ class FlagScanner:
         self.steady = {}         # addr -> fraction of play-time readings at up value
 
     def attach(self):
-        self.pm = pymem.Pymem(PROCESS_NAME)
+        self.pm = procmem.Process()
         self.regions = memscan.list_writable_regions(self.pm)
         self.progress(f"Attached to {PROCESS_NAME} ({len(self.regions)} memory regions)")
 

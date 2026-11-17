@@ -29,6 +29,7 @@ import diagram
 import echo
 import fingering
 import pitch
+import procmem
 import setup_helpers
 from engine import Engine
 from flag_scan import FlagScanner
@@ -355,7 +356,8 @@ class SetupTab(Tab):
             st["gamemic"] = setup_helpers.game_mic_off(st["ini"]) if st["ini"] else False
             f = cfg["flag"]
             st["flag"] = st["flag_auto"] = None
-            if st["running"]:
+            st["memerr"] = procmem.access_problem() if st["running"] else None
+            if st["running"] and not st["memerr"]:
                 gf = GameFlag(f["address"], f["up_value"], f["down_value"])
                 st["flag"], st["flag_auto"] = gf.read(), gf.via_chains
             if time.monotonic() - self._last_proc_scan > 10:
@@ -385,10 +387,11 @@ class SetupTab(Tab):
         running = st.get("running", False)
 
         if st.get("vigem"):
-            r["driver"].set(True, "Virtual controller driver (ViGEmBus) installed")
+            r["driver"].set(True, setup_helpers.DRIVER_OK_TEXT)
         else:
-            r["driver"].set(False, "ViGEmBus driver not installed -- needed to send notes to the game",
-                            "Get driver", lambda: webbrowser.open(setup_helpers.VIGEM_URL))
+            r["driver"].set(False, setup_helpers.DRIVER_MISSING_TEXT,
+                            "Get driver" if setup_helpers.IS_WINDOWS else "How to fix",
+                            lambda: webbrowser.open(setup_helpers.DRIVER_URL))
 
         if not st.get("ini"):
             r["bindings"].set(False, "Couldn't find Longshot's settings file (longshot_options.ini)",
@@ -452,6 +455,9 @@ class SetupTab(Tab):
                           ("while Scroll Lock is on" if mode == "hotkey" else "all the time") + " (More settings > Play options)")
         elif not running:
             r["flag"].set(None, "Game flag: start Longshot to check it")
+        elif st.get("memerr"):
+            r["flag"].set(False, st["memerr"], "How to fix",
+                          lambda: webbrowser.open(setup_helpers.LINUX_SETUP_URL))
         elif st.get("flag") is None:
             r["flag"].set(False, "Game flag not found (a Longshot update may have moved it) -- using Scroll Lock "
                                  "until it's found", "Find flag", self.app.go_flag_scan)
@@ -908,7 +914,7 @@ class PlayTab(Tab):
             messagebox.showwarning("Ocarina Translator", "Calibrate your notes first (Calibrate tab).")
             return
         if not setup_helpers.vigem_installed():
-            messagebox.showwarning("Ocarina Translator", "Install the ViGEmBus driver first (Setup tab).")
+            messagebox.showwarning("Ocarina Translator", "Set up the virtual controller first (Setup tab checklist).")
             return
         self.app.stop_monitor()
         try:

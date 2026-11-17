@@ -12,27 +12,30 @@ State lives in the scratch dir given by ARENA_DIR (default: .\\arena_state).
 """
 import ctypes, json, os, sys
 import numpy as np
-import pymem
-from flag_probe import MBI, k32
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the app's modules
+import procmem  # noqa: E402
 
 STATE = os.environ.get("ARENA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "arena_state"))
 CHUNK = 64 << 20
 MIN_RESERVE = 0x1000000000          # the guest arena is a huge (>=64 GB) private reservation
 
 
-def arena(h):
-    """(base, [(region_base, size)]) of the biggest private reservation's committed RW regions."""
-    allocs, addr, m = {}, 0, MBI()
-    while addr < 0x7FFFFFFFFFFF and k32.VirtualQueryEx(h, ctypes.c_void_p(addr), ctypes.byref(m), ctypes.sizeof(m)):
-        if m.State != 0x10000:
-            a = allocs.setdefault(m.AllocationBase, [0, []])
-            a[0] += m.RegionSize
-            if m.State == 0x1000 and m.Type == 0x20000 and m.Protect == 0x04:
-                a[1].append((m.BaseAddress, m.RegionSize))
-        addr = m.BaseAddress + m.RegionSize
+def arena(proc):
+    """(base, [(region_base, size)], total_size) of the biggest reservation and its committed,
+    writable, private regions. Works on Windows and Linux (via procmem).
+
+    On Linux the kernel merges neighbouring maps with the same permissions, so the block's
+    *start* can shift by whatever happens to sit just below it; its *end* (the top of the
+    reservation) is usually steadier. So we report offsets from both ends."""
+    allocs = {}
+    for r in proc.regions():
+        a = allocs.setdefault(r.alloc_base, [0, []])
+        a[0] += r.size
+        if r.committed and r.private and r.writable:
+            a[1].append((r.base, r.size))
     base, (size, regs) = max(allocs.items(), key=lambda kv: kv[1][0])
     assert size >= MIN_RESERVE, "no guest arena found"
-    return base, regs
+    return base, regs, size
 
 
 def chunks(regs):
@@ -44,21 +47,28 @@ def chunks(regs):
 def main():
     cmd = sys.argv[1]
     os.makedirs(STATE, exist_ok=True)
-    pm = pymem.Pymem("longshot.exe")
-    base, regs = arena(pm.process_handle)
+    pm = procmem.Process()
+    base, regs, size = arena(pm)
     cand_path = os.path.join(STATE, "cands.npy")
+    meta_path = os.path.join(STATE, "arena_meta.json")
     if cmd == "report" or cmd == "test":
         offs = np.load(cand_path)
+        scan_size = json.load(open(meta_path))["size"] if os.path.exists(meta_path) else size
         if cmd == "report":
-            print(f"arena 0x{base:X}: {len(offs)} candidates;", [hex(int(o)) for o in offs[:20]])
+            print(f"arena 0x{base:X}-0x{base + size:X}: {len(offs)} candidates")
+            print("  from start:", [hex(int(o)) for o in offs[:20]])
+            print("  from end:  ", [hex(int(o) - scan_size) for o in offs[:20]], "(use these negative values "
+                  "in flag_spots.LINUX_OFFSETS if 'test' shows the end is the steady anchor)")
             return
-        ok = []
-        for o in offs.tolist():
-            try:
-                ok.append((hex(o), pm.read_bytes(base + o, 1)[0]))
-            except Exception:
-                pass
-        print(f"arena 0x{base:X}: values at saved offsets:", ok[:20])
+        for label, at in (("start", lambda o: base + o), ("end", lambda o: base + size + (o - scan_size))):
+            vals = []
+            for o in offs.tolist():
+                try:
+                    vals.append(pm.read_bytes(at(o), 1)[0])
+                except Exception:
+                    vals.append(None)
+            print(f"anchored at {label}: {sum(v in (0, 1) for v in vals)}/{len(vals)} read 0/1;",
+                  "first values:", vals[:20])
         return
 
     if cmd == "hold":
@@ -132,6 +142,7 @@ def main():
             i = j
         offs = offs[keep]
     np.save(cand_path, offs)
+    json.dump({"size": size}, open(meta_path, "w"))
     print(f"arena 0x{base:X}: {len(offs)} candidates")
 
 

@@ -1,18 +1,29 @@
 """First-run checks: virtual-controller driver, and Longshot's note bindings."""
-import ctypes
 import os
 import shutil
+import signal
 import subprocess
+import sys
 import time
-from ctypes import wintypes
 
 import config
-from ocarina_flag import PROCESS_NAME, game_running
+import procmem
+from ocarina_flag import game_running
 
+IS_WINDOWS = sys.platform == "win32"
 VIGEM_URL = "https://github.com/nefarius/ViGEmBus/releases"
+LINUX_SETUP_URL = "https://github.com/maplerouteadmin-dev/longshot-ocarina#linux-experimental"
+DRIVER_URL = VIGEM_URL if IS_WINDOWS else LINUX_SETUP_URL
+DRIVER_OK_TEXT = ("Virtual controller driver (ViGEmBus) installed" if IS_WINDOWS
+                  else "Allowed to create a virtual controller (/dev/uinput)")
+DRIVER_MISSING_TEXT = ("ViGEmBus driver not installed -- needed to send notes to the game" if IS_WINDOWS
+                       else "No permission for /dev/uinput -- needed to send notes to the game (see README)")
 
 
 def vigem_installed():
+    """Can we create the virtual controller? (Windows: ViGEmBus running; Linux: /dev/uinput writable.)"""
+    if not IS_WINDOWS:
+        return os.access("/dev/uinput", os.W_OK)
     try:
         out = subprocess.run(["sc", "query", "ViGEmBus"], capture_output=True, text=True,
                              creationflags=NO_WINDOW).stdout
@@ -25,8 +36,18 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def launcher_path():
-    p = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "LongshotLauncher", "LongshotLauncher.exe")
-    return p if os.path.exists(p) else None
+    if IS_WINDOWS:
+        p = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "LongshotLauncher",
+                         "LongshotLauncher.exe")
+        return p if os.path.exists(p) else None
+    import glob
+    home = os.path.expanduser("~")
+    for pattern in ("Applications/LongshotLauncher*.AppImage", ".local/bin/LongshotLauncher*",
+                    "Downloads/LongshotLauncher*.AppImage", "LongshotLauncher*.AppImage"):
+        hits = sorted(glob.glob(os.path.join(home, pattern)))
+        if hits:
+            return hits[-1]
+    return None
 
 
 def can_start_longshot(cfg):
@@ -51,6 +72,8 @@ def other_instances():
     own virtual controller, which can make Longshot ignore this one's presses.
     Returns [(pid, description)]."""
     me = {os.getpid(), os.getppid()}
+    if not IS_WINDOWS:
+        return _other_instances_linux(me)
     ps = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'python.exe','pythonw.exe',"
           "'OcarinaTranslator.exe' } | ForEach-Object { \"$($_.ProcessId)|$($_.ParentProcessId)|$($_.Name)|"
           "$($_.CommandLine)\" }")
@@ -73,26 +96,52 @@ def other_instances():
         if name.lower() == "ocarinatranslator.exe":
             found.append((pid, "OcarinaTranslator.exe"))
         elif "translator.py" in low or "ocarinatranslator\\app.py" in low or "flag_scan" in low:
-            found.append((pid, f"python {cmd.split('python.exe')[-1].strip(' \"')}"))
+            script = cmd.split("python.exe")[-1].strip(' "')   # no backslash in f-strings before Python 3.12
+            found.append((pid, f"python {script}"))
+    return found
+
+
+def _other_instances_linux(me):
+    here = os.path.dirname(os.path.abspath(__file__))
+    ours = {os.path.join(here, "app.py"), os.path.join(here, "translator.py")}
+    found = []
+    for d in os.listdir("/proc"):
+        if not d.isdigit() or int(d) in me:
+            continue
+        try:
+            with open(f"/proc/{d}/cmdline", "rb") as f:
+                argv = [a.decode(errors="ignore") for a in f.read().split(b"\x00") if a]
+            with open(f"/proc/{d}/stat") as f:
+                ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+            cwd = os.readlink(f"/proc/{d}/cwd")
+        except (OSError, ValueError, IndexError):
+            continue
+        if not argv or ppid in me or WAIT_FLAG in argv:
+            continue
+        if os.path.basename(argv[0]).lower() == "ocarinatranslator":      # the built binary
+            found.append((int(d), "OcarinaTranslator"))
+            continue
+        if "python" in os.path.basename(argv[0]).lower():
+            scripts = {os.path.normpath(os.path.join(cwd, a)) for a in argv[1:3]}
+            if scripts & ours:
+                found.append((int(d), " ".join(argv[:3])))
     return found
 
 
 def close_instances(pids):
     for pid in pids:
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
+        if IS_WINDOWS:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
+        else:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
 
 
 def _running_exe_path():
-    try:
-        import pymem
-        pm = pymem.Pymem(PROCESS_NAME)
-    except Exception:
-        return None
-    buf = ctypes.create_unicode_buffer(1024)
-    size = wintypes.DWORD(len(buf))
-    if ctypes.windll.kernel32.QueryFullProcessImageNameW(pm.process_handle, 0, buf, ctypes.byref(size)):
-        return buf.value
-    return None
+    proc = procmem.open_game()
+    return proc.exe_path() if proc else None
 
 
 def find_ini(saved_path=""):
@@ -100,12 +149,16 @@ def find_ini(saved_path=""):
     if saved_path and os.path.exists(saved_path):
         return saved_path
     exe = _running_exe_path()
+    folders = []
     if exe:
         d = os.path.dirname(exe)
-        for folder in (d, os.path.dirname(d)):
-            p = os.path.join(folder, "longshot_options.ini")
-            if os.path.exists(p):
-                return p
+        folders += [d, os.path.dirname(d)]
+    if not IS_WINDOWS:   # Linux keeps per-user data here (saves, maybe the ini)
+        folders.append(os.path.expanduser("~/.local/share/longshot"))
+    for folder in folders:
+        p = os.path.join(folder, "longshot_options.ini")
+        if os.path.exists(p):
+            return p
     return None
 
 
@@ -212,8 +265,9 @@ def apply_bindings(path):
 
 # ---- start with Windows, wait for Longshot -------------------------------
 WAIT_FLAG = "--wait-for-longshot"
-STARTUP_LNK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup",
-                           "Ocarina Translator.lnk")
+STARTUP_LNK = (os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup",
+                            "Ocarina Translator.lnk") if IS_WINDOWS
+               else os.path.expanduser("~/.config/autostart/ocarina-translator.desktop"))
 
 
 def autostart_enabled():
@@ -222,10 +276,21 @@ def autostart_enabled():
 
 def set_autostart(on):
     """Add/remove a Startup-folder shortcut that runs this app in wait-for-Longshot mode."""
-    import sys
     if not on:
         if os.path.exists(STARTUP_LNK):
             os.remove(STARTUP_LNK)
+        return
+    if not IS_WINDOWS:
+        if getattr(sys, "frozen", False):
+            cmd = f'"{sys.executable}" {WAIT_FLAG}'
+        else:
+            app_py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
+            cmd = f'"{sys.executable}" "{app_py}" {WAIT_FLAG}'
+        os.makedirs(os.path.dirname(STARTUP_LNK), exist_ok=True)
+        lines = ["[Desktop Entry]", "Type=Application", "Name=Ocarina Translator", f"Exec={cmd}",
+                 "X-GNOME-Autostart-enabled=true", "NoDisplay=true"]
+        with open(STARTUP_LNK, "w") as f:
+            f.write("\n".join(lines) + "\n")
         return
     if getattr(sys, "frozen", False):
         target, args, workdir = sys.executable, WAIT_FLAG, os.path.dirname(sys.executable)
