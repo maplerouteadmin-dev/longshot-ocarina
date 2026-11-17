@@ -188,4 +188,4 @@ python app.py
 
 ## License
 
-[MIT](LICENSE) © 2026 Jon Parkhill
+[MIT](LICENSE) © 2026 The Longshot Ocarina contributors
