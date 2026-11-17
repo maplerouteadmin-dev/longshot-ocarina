@@ -150,7 +150,8 @@ the d-pad, sticks, triggers or Start.
 
 There's an **experimental Linux version** you can try:
 **[v1.1.1-linux-test](https://github.com/maplerouteadmin-dev/longshot-ocarina/releases/tag/v1.1.1-linux-test)**.
-It runs from source; the release notes have the install steps.
+Download `OcarinaTranslator-linux-x86_64` from that page (or run it from
+source); the release notes have the steps.
 
 Honest caveat: I don't have hardware that can run Longshot on Linux, so it
 hasn't been tested with the real game yet. It has been tested in an Ubuntu VM
