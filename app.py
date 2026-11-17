@@ -48,6 +48,12 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"Ocarina Translator v{__version__}")
+        try:   # ocarina icon (bundled into the exe by build.bat; next to app.py from source)
+            base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+            self._icon = ImageTk.PhotoImage(Image.open(os.path.join(base, "icon.png")))
+            self.iconphoto(True, self._icon)
+        except Exception:
+            pass
         self.geometry("920x860")
         self.minsize(840, 760)
         self.cfg = config.load()
