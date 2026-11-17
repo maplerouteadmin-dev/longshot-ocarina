@@ -26,8 +26,8 @@ MIN_ARENA = 0x1000000000          # the arena is a >= 64 GB reservation
 PLATFORM_OFFSETS = OFFSETS if procmem.IS_WINDOWS else LINUX_OFFSETS
 
 
-def find_arena(proc):
-    """Base of the biggest private reservation (the emulated console memory), or None."""
+def find_arena_bounds(proc):
+    """(start, end) of the biggest private reservation (the emulated console memory), or None."""
     sizes = {}
     for r in proc.regions():
         if r.private:
@@ -35,7 +35,13 @@ def find_arena(proc):
     if not sizes:
         return None
     base, size = max(sizes.items(), key=lambda kv: kv[1])
-    return base if size >= MIN_ARENA else None
+    return (base, base + size) if size >= MIN_ARENA else None
+
+
+def find_arena(proc):
+    """Start of the arena, or None."""
+    b = find_arena_bounds(proc)
+    return b[0] if b else None
 
 
 class GameFlag:
@@ -46,6 +52,7 @@ class GameFlag:
         self.offsets = PLATFORM_OFFSETS if offsets is None else offsets
         self._pm = None
         self._arena = None
+        self._arena_end = None
         self.last_raw = None
         self.via_chains = False           # True when the last read used the arena spots ("automatic")
         self._next_attach = 0.0           # throttle: looking for the game scans every process
@@ -57,20 +64,25 @@ class GameFlag:
             return None
         self._next_attach = now + 1.0
         self._pm = procmem.open_game()
-        self._arena = None
+        self._arena = self._arena_end = None
         if self._pm is not None and self.offsets:
             try:
-                self._arena = find_arena(self._pm)
+                self._arena, self._arena_end = find_arena_bounds(self._pm) or (None, None)
             except Exception:
-                self._arena = None
+                self._arena = self._arena_end = None
         return self._pm
+
+    def _addr(self, o):
+        """Offsets >= 0 count from the arena's start; negative ones from its end (steadier on Linux,
+        where the kernel can merge a neighbouring map onto the start)."""
+        return self._arena + o if o >= 0 else self._arena_end + o
 
     def _vote(self):
         """1/0 when a clear majority of the arena spots agree, else None."""
         up = down = 0
         for o in self.offsets:
             try:
-                v = self._pm.read_bytes(self._arena + o, 1)[0]
+                v = self._pm.read_bytes(self._addr(o), 1)[0]
             except Exception:
                 continue
             up += v == SPOT_UP
@@ -83,7 +95,7 @@ class GameFlag:
         return None
 
     def current_address(self):
-        return (self._arena + self.offsets[0]) if self.via_chains and self._arena else self.address
+        return self._addr(self.offsets[0]) if self.via_chains and self._arena else self.address
 
     def read(self):
         """True = ocarina up, False = put away, None = can't tell."""
