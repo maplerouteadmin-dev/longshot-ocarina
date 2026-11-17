@@ -96,7 +96,8 @@ def other_instances():
         if name.lower() == "ocarinatranslator.exe":
             found.append((pid, "OcarinaTranslator.exe"))
         elif "translator.py" in low or "ocarinatranslator\\app.py" in low or "flag_scan" in low:
-            found.append((pid, f"python {cmd.split('python.exe')[-1].strip(' \"')}"))
+            script = cmd.split("python.exe")[-1].strip(' "')   # no backslash in f-strings before Python 3.12
+            found.append((pid, f"python {script}"))
     return found
 
 
