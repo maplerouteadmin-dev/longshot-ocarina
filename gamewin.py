@@ -38,6 +38,9 @@ def _xdotool(*args):
 def _game_window_linux(pid):
     out = _xdotool("search", "--onlyvisible", "--pid", str(pid))
     wins = [w for w in (out or "").split() if w.isdigit()]
+    if not wins:   # some toolkits don't set _NET_WM_PID; fall back to the window title
+        out = _xdotool("search", "--onlyvisible", "--name", "[Ll]ongshot|[Oo]carina [Oo]f [Tt]ime")
+        wins = [w for w in (out or "").split() if w.isdigit()]
     best = None
     for w in wins:
         geo = _xdotool("getwindowgeometry", "--shell", w) or ""
