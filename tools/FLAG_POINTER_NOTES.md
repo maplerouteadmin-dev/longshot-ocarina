@@ -5,7 +5,7 @@ Longshot runs the game in an emulated console whose memory is its biggest
 private reservation (64 GB+, at 0x100000000000 so far, ~10 GB committed). The
 normal scan (`flag_scan.py`) skips regions over 64 MB, so it never searched it.
 
-`toolsrena_scan.py` scans just the arena: `down` / `up` rounds, `hold <0|1> <secs>`
+`tools/arena_scan.py` scans just the arena: `down` / `up` rounds, `hold <0|1> <secs>`
 (drop spots that flicker while playing), `report`. Results from 2026-11-16:
 192,635 → 35,443 after two rounds. After a *verified* restart (new pid)
 30,789 still tracked the ocarina; 20,981 stayed steady through 15 s of
@@ -20,7 +20,7 @@ back to the scanned heap address if the vote fails.
   real restart 0 of 199 resolved. Always check the pid changed.
 
 ## If a Longshot update breaks it
-In game, ocarina away: `python toolsrena_scan.py down`; up: `... up`; repeat once.
+In game, ocarina away: `python tools/arena_scan.py down`; up: `... up`; repeat once.
 Restart Longshot (check the pid changed), then do `down`/`up` again, and
 `hold 1 15` while playing and `hold 0 6` while put away. Then regenerate
 the `"flag"` list in the game's profile `games/<game>.json` from `arena_state\cands.npy`
