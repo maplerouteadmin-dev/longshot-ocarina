@@ -12,7 +12,18 @@ import sys
 from dataclasses import dataclass
 
 IS_WINDOWS = sys.platform == "win32"
+# The game process to look for. games.activate() points this at the chosen game's names.
 PROCESS_NAMES = ("longshot.exe",) if IS_WINDOWS else ("longshot", "longshot.exe")
+_target = PROCESS_NAMES
+
+
+def set_target(names):
+    global _target
+    _target = tuple(n for n in names if n) or PROCESS_NAMES
+
+
+def target():
+    return _target
 
 
 @dataclass
@@ -47,8 +58,19 @@ if IS_WINDOWS:
     _k32.VirtualQueryEx.restype = ctypes.c_size_t
     _WRITABLE = {0x04, 0x08, 0x40, 0x80}
 
+    def find_pid(names):
+        for n in names:
+            try:
+                entry = pymem.process.process_from_name(n)
+            except Exception:
+                entry = None
+            if entry:
+                return entry.th32ProcessID
+        return None
+
     class Process:
-        def __init__(self, names=PROCESS_NAMES):
+        def __init__(self, names=None):
+            names = names or _target
             last = None
             for n in names:
                 try:
@@ -104,8 +126,11 @@ else:
                 return int(d)
         return None
 
+    find_pid = None   # defined below for Linux
+
     class Process:
-        def __init__(self, names=PROCESS_NAMES):
+        def __init__(self, names=None):
+            names = names or _target
             pid = _find_pid(names)
             if pid is None:
                 raise ProcessNotFound(", ".join(names))
@@ -164,11 +189,32 @@ else:
             return out
 
 
+def list_process_names():
+    """Sorted, de-duplicated names of running programs (for picking a game that has no profile)."""
+    names = set()
+    if IS_WINDOWS:
+        try:
+            for p in pymem.process.list_processes():
+                n = p.szExeFile.decode(errors="ignore") if isinstance(p.szExeFile, bytes) else str(p.szExeFile)
+                names.add(n)
+        except Exception:
+            pass
+    else:
+        for d in os.listdir("/proc"):
+            if d.isdigit():
+                try:
+                    with open(f"/proc/{d}/comm") as f:
+                        names.add(f.read().strip())
+                except OSError:
+                    pass
+    return sorted((n for n in names if n), key=str.lower)
+
+
 def access_problem():
     """None if we can read the running game's memory (or it isn't running), else a short reason."""
     if IS_WINDOWS:
         return None
-    pid = _find_pid(PROCESS_NAMES)
+    pid = _find_pid(_target)
     if pid is None:
         return None
     try:
@@ -189,9 +235,11 @@ def open_game():
 
 
 def game_running():
-    if IS_WINDOWS:
-        return open_game() is not None
-    return _find_pid(PROCESS_NAMES) is not None
+    return find_pid(_target) is not None
+
+
+if not IS_WINDOWS:
+    find_pid = _find_pid
 
 
 def allocations(proc):

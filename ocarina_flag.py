@@ -3,7 +3,7 @@
 Longshot runs the game in an emulated console whose memory is one huge private
 reservation in the game process (the "arena"). Game variables sit at fixed
 offsets inside it, so the flag survives restarts: we read the offsets in
-flag_spots.py (found by tools/arena_scan.py) and take the majority (1 = up,
+the active game profile (games/<game>.json, found by tools/arena_scan.py) and take the majority (1 = up,
 0 = put away). The Windows and Linux builds lay memory out differently, so each
 has its own offsets; Linux ones haven't been found yet (see the GitHub issue).
 
@@ -18,12 +18,9 @@ silently never listening.
 import time
 
 import procmem
-from flag_spots import LINUX_OFFSETS, OFFSETS
-
-PROCESS_NAME = procmem.PROCESS_NAMES[0]
+PROCESS_NAME = procmem.PROCESS_NAMES[0]   # default only; the active game sets procmem's target
 SPOT_UP, SPOT_DOWN = 1, 0
 MIN_ARENA = 0x1000000000          # the arena is a >= 64 GB reservation
-PLATFORM_OFFSETS = OFFSETS if procmem.IS_WINDOWS else LINUX_OFFSETS
 
 
 def find_arena_bounds(proc):
@@ -49,7 +46,10 @@ class GameFlag:
         self.address = address            # raw fallback from the scan
         self.up_value = up_value
         self.down_value = down_value
-        self.offsets = PLATFORM_OFFSETS if offsets is None else offsets
+        if offsets is None:   # the active game's known flag spots (empty -> raw address only)
+            import games
+            offsets = games.active().flag_offsets()
+        self.offsets = offsets
         self._pm = None
         self._arena = None
         self._arena_end = None

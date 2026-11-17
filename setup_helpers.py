@@ -7,6 +7,7 @@ import sys
 import time
 
 import config
+import games
 import procmem
 from ocarina_flag import game_running
 
@@ -36,35 +37,31 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def launcher_path():
-    if IS_WINDOWS:
-        p = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "LongshotLauncher",
-                         "LongshotLauncher.exe")
-        return p if os.path.exists(p) else None
-    import glob
-    home = os.path.expanduser("~")
-    for pattern in ("Applications/LongshotLauncher*.AppImage", ".local/bin/LongshotLauncher*",
-                    "Downloads/LongshotLauncher*.AppImage", "LongshotLauncher*.AppImage"):
-        hits = sorted(glob.glob(os.path.join(home, pattern)))
-        if hits:
-            return hits[-1]
-    return None
+    return games.active().launcher_path()
 
 
-def can_start_longshot(cfg):
-    return bool(launcher_path() or (cfg.get("longshot_exe") and os.path.exists(cfg["longshot_exe"])))
+def _remembered_exe(cfg):
+    exe = games.paths(cfg).get("exe")
+    return exe if exe and os.path.exists(exe) else None
 
 
-def start_longshot(cfg):
-    """Start the game the way the desktop shortcut does (launcher --play), or
-    the game exe seen running before if the launcher isn't installed."""
+def can_start_game(cfg):
+    return bool(launcher_path() or _remembered_exe(cfg))
+
+
+def start_game(cfg):
+    """Start the chosen game: its launcher (e.g. Longshot's launcher --play) if it has one,
+    else the game exe seen running before."""
+    g = games.active()
     launcher = launcher_path()
     if launcher:
-        subprocess.Popen([launcher, "--play"], cwd=os.path.dirname(launcher))
-    elif cfg.get("longshot_exe") and os.path.exists(cfg["longshot_exe"]):
-        subprocess.Popen([cfg["longshot_exe"]], cwd=os.path.dirname(cfg["longshot_exe"]))
+        subprocess.Popen([launcher, *g.launcher.get("args", [])], cwd=os.path.dirname(launcher))
+    elif _remembered_exe(cfg):
+        exe = _remembered_exe(cfg)
+        subprocess.Popen([exe], cwd=os.path.dirname(exe))
     else:
-        raise RuntimeError("Couldn't find Longshot or its launcher -- start it yourself once and the app "
-                           "will remember where it is.")
+        raise RuntimeError(f"Couldn't find {g.name} -- start it yourself once and the app will remember "
+                           "where it is.")
 
 
 def other_instances():
@@ -145,8 +142,12 @@ def _running_exe_path():
 
 
 def find_ini(saved_path=""):
-    """longshot_options.ini: the saved path, else next to the running game."""
-    if saved_path and os.path.exists(saved_path):
+    """The active game's options file (e.g. longshot_options.ini): the saved path, else next to
+    the running game. None for games whose settings we don't manage."""
+    name = games.active().settings_file
+    if not name:
+        return None
+    if saved_path and os.path.exists(saved_path) and os.path.basename(saved_path) == name:
         return saved_path
     exe = _running_exe_path()
     folders = []
@@ -154,9 +155,9 @@ def find_ini(saved_path=""):
         d = os.path.dirname(exe)
         folders += [d, os.path.dirname(d)]
     if not IS_WINDOWS:   # Linux keeps per-user data here (saves, maybe the ini)
-        folders.append(os.path.expanduser("~/.local/share/longshot"))
+        folders.append(os.path.expanduser(f"~/.local/share/{games.active().id}"))
     for folder in folders:
-        p = os.path.join(folder, "longshot_options.ini")
+        p = os.path.join(folder, name)
         if os.path.exists(p):
             return p
     return None
@@ -180,6 +181,10 @@ def binding_status(path):
 
 
 def bindings_ok(path):
+    """Ocarina notes reach the controller buttons. Games without separate note slots
+    (e.g. Hookshot) use the normal A/L/R/X/Y buttons, so there's nothing to bind."""
+    if not games.active().note_slots:
+        return True
     return all(cur == want and want is not None for cur, want in binding_status(path).values())
 
 
