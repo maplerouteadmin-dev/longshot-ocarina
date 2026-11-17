@@ -1,0 +1,25 @@
+{
+  "id": "hookshot",
+  "name": "Hookshot",
+  "process": {
+    "windows": [
+      "hookshot.exe"
+    ],
+    "linux": [
+      "hookshot"
+    ]
+  },
+  "window_title": "[Hh]ookshot",
+  "settings_file": "hookshot_options.ini",
+  "note_slots": false,
+  "launcher": {
+    "windows": [],
+    "linux": [],
+    "args": []
+  },
+  "flag": {
+    "windows": [],
+    "linux": []
+  },
+  "setup_note": ""
+}

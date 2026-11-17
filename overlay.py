@@ -187,6 +187,16 @@ class FingeringOverlay:
         self._stop.set()
         self._up = False
 
+    def restart(self):
+        """The chosen game changed: poll the new game's flag."""
+        was_on = self.cfg.get("enabled")
+        self.stop()
+        if self._thread:
+            self._thread.join(timeout=1)
+        self._thread = None
+        if was_on:
+            self.start()
+
     def _poll(self):
         f = self.app.cfg["flag"]
         flag = GameFlag(f["address"], f["up_value"], f["down_value"])

@@ -8,6 +8,7 @@ the emulated console's memory, where game variables may sit at a fixed offset.
   python arena_scan.py down/up  # repeat to narrow down
   python arena_scan.py report   # print candidate offsets from the arena base
   python arena_scan.py test     # check saved offsets against a fresh (restarted) arena
+Add --game hookshot (or eden, ...) or --process <name.exe> to scan another port.
 State lives in the scratch dir given by ARENA_DIR (default: .\\arena_state).
 """
 import ctypes, json, os, sys
@@ -45,6 +46,22 @@ def chunks(regs):
 
 
 def main():
+    # optional: --game <id> (a games/<id>.json profile, default longshot) or --process <name>
+    args = sys.argv[1:]
+    import games
+    if "--process" in args:
+        i = args.index("--process")
+        games.activate({"game": games.CUSTOM_ID, "custom_process": args[i + 1]})
+        del args[i:i + 2]
+    else:
+        gid = "longshot"
+        if "--game" in args:
+            i = args.index("--game")
+            gid = args[i + 1]
+            del args[i:i + 2]
+        games.activate({"game": gid})
+    sys.argv[1:] = args
+    print(f"game: {games.active().name} ({', '.join(games.active().process_names())})")
     cmd = sys.argv[1]
     os.makedirs(STATE, exist_ok=True)
     pm = procmem.Process()
@@ -58,7 +75,8 @@ def main():
             print(f"arena 0x{base:X}-0x{base + size:X}: {len(offs)} candidates")
             print("  from start:", [hex(int(o)) for o in offs[:20]])
             print("  from end:  ", [hex(int(o) - scan_size) for o in offs[:20]], "(use these negative values "
-                  "in flag_spots.LINUX_OFFSETS if 'test' shows the end is the steady anchor)")
+                  "in the game's profile games/<game>.json, under flag -> linux/windows, if 'test' shows the end "
+                  "is the steady anchor)")
             return
         for label, at in (("start", lambda o: base + o), ("end", lambda o: base + size + (o - scan_size))):
             vals = []

@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 python3 -m PyInstaller --noconfirm --onefile --windowed --name OcarinaTranslator \
-  --add-data "icon.png:." \
+  --add-data "icon.png:." --add-data "games:games" \
   --collect-all sounddevice \
   --collect-all soundcard \
   --hidden-import gamepad_linux --hidden-import PIL._tkinter_finder \

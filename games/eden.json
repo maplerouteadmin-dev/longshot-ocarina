@@ -1,0 +1,25 @@
+{
+  "id": "eden",
+  "name": "Eden",
+  "process": {
+    "windows": [
+      "eden.exe"
+    ],
+    "linux": [
+      "eden"
+    ]
+  },
+  "window_title": "[Ee]den",
+  "settings_file": null,
+  "note_slots": false,
+  "launcher": {
+    "windows": [],
+    "linux": [],
+    "args": []
+  },
+  "flag": {
+    "windows": [],
+    "linux": []
+  },
+  "setup_note": "In Eden's controller settings, set Player 1 to the virtual \"Xbox 360\" controller this app creates (it appears once you press Start on the Play tab)."
+}

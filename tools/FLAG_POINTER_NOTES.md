@@ -9,7 +9,7 @@ normal scan (`flag_scan.py`) skips regions over 64 MB, so it never searched it.
 (drop spots that flicker while playing), `report`. Results from 2026-11-16:
 192,635 → 35,443 after two rounds. After a *verified* restart (new pid)
 30,789 still tracked the ocarina; 20,981 stayed steady through 15 s of
-playing and 6 s put away. `flag_spots.py` keeps 31 of them (one per page,
+playing and 6 s put away. `games/longshot.json` ("flag" -> "windows") keeps 31 of them (one per page,
 spread out), and `GameFlag` takes a 2/3 majority (1 = up, 0 = away). It falls
 back to the scanned heap address if the vote fails.
 
@@ -23,4 +23,6 @@ back to the scanned heap address if the vote fails.
 In game, ocarina away: `python tools/arena_scan.py down`; up: `... up`; repeat once.
 Restart Longshot (check the pid changed), then do `down`/`up` again, and
 `hold 1 15` while playing and `hold 0 6` while put away. Then regenerate
-`flag_spots.py` from `arena_state\cands.npy` (one offset per page, ~31).
+the `"flag"` list in the game's profile `games/<game>.json` from `arena_state\cands.npy`
+(one offset per page, ~31). The same steps work for any port (Hookshot, Eden, ...):
+choose the game on the Setup tab first so the tools look at the right program.

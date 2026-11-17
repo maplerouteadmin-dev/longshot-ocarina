@@ -63,6 +63,10 @@ settings**, and you don't need it to get going. The **Setup** tab has a
 done yet.
 
 1. **Setup**
+   - **Pick your game** at the top: Longshot, Hookshot or Eden, or **Detect
+     running game**. For anything else (another emulator or recomp), choose
+     **Other** and pick its program from the list. The checklist below adapts
+     to the game you chose.
    - Pick your microphone. The level bar should move when you play.
    - **Close Longshot**, then click **Apply bindings**. This points Longshot's
      ocarina-note slots at the virtual controller. Then click **Fix** next to
@@ -103,6 +107,21 @@ start by itself (below).
 | C-Right | B | A5 |
 | C-Left | X | B5 |
 | C-Up | Y | D6 |
+
+## Supported games
+
+| Game | Notes bound automatically | Settings fixed by the app | Flag found automatically |
+|---|---|---|---|
+| **Longshot** | yes (`pad_note_*`) | yes | yes (Windows) |
+| **Hookshot** | not needed (ocarina uses A/L/R/X/Y) | yes | not yet: use Game Flag → Find it manually |
+| **Eden** (Switch emulator) | set Player 1 to the virtual Xbox 360 pad in Eden | no | not yet: use the manual scan |
+| **Other** (any program) | bind the notes to LB, RB, B, X, Y yourself | no | use the manual scan |
+
+Each game is a small profile in [`games/`](games). To add one, copy a profile,
+change the process name, window title and settings file, and drop it into a
+`games` folder next to the app (or send a pull request). If you find a game's
+flag spots with `tools/arena_scan.py --game <id>`, adding them to its profile
+makes the flag automatic for everyone.
 
 ## Features
 
@@ -257,7 +276,7 @@ python app.py
   loopback) and ignores pitches the game itself is playing.
 - **Ocarina flag:** Longshot runs the game inside one large block of emulated
   console memory. The flag sits at fixed offsets inside it, so the app reads 31
-  of them and takes a majority vote (`ocarina_flag.py`, `flag_spots.py`). If a
+  of them and takes a majority vote (`ocarina_flag.py`, `games/longshot.json`). If a
   Longshot update moves them, `tools\arena_scan.py` finds them again. See
   `tools\FLAG_POINTER_NOTES.md`.
 - **Output:** a virtual Xbox 360 pad via ViGEmBus (`vgamepad`).
@@ -268,7 +287,8 @@ python app.py
 | `engine.py` | live pipeline: mic → matcher → gate → virtual pad, custom mappings |
 | `audio.py`, `pitch.py`, `matcher.py` | mic input, pitch detection, note decisions |
 | `echo.py` | game-sound filter (speaker loopback) |
-| `ocarina_flag.py`, `flag_spots.py` | read the "ocarina is up" flag |
+| `ocarina_flag.py` | read the "ocarina is up" flag |
+| `games.py`, `games/*.json` | game profiles: Longshot, Hookshot, Eden (process, settings file, flag spots, launcher) |
 | `flag_scan.py`, `memscan.py` | the manual flag scan (Game Flag tab) |
 | `tools/` | developer tools used to find the flag (`arena_scan.py`, `ptrscan.py`, `flag_probe.py`) and notes |
 | `version.py` | the app version shown in the title bar |

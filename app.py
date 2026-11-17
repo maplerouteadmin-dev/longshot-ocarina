@@ -28,6 +28,7 @@ import config
 import diagram
 import echo
 import fingering
+import games
 import pitch
 import procmem
 import setup_helpers
@@ -58,6 +59,8 @@ class App(tk.Tk):
         self.geometry("920x780")
         self.minsize(820, 640)
         self.cfg = config.load()
+        games.migrate(self.cfg)
+        games.activate(self.cfg)
         self.ui_queue = queue.Queue()
         self.monitor = None
         self.monitor_paused = False
@@ -256,9 +259,11 @@ class CheckRow:
         self.btn = ttk.Button(parent, width=16)
         self.btn.grid(row=row, column=1, sticky="e", padx=(8, 0), pady=3)
         self.ok = None
+        self.na = False      # doesn't apply to the chosen game: left out of the "x of y ready" count
 
-    def set(self, ok, text, button=None, command=None):
+    def set(self, ok, text, button=None, command=None, na=False):
         self.ok = ok
+        self.na = na
         sym, color = self.MARKS[ok]
         self.mark.config(text=sym, foreground=color)
         self.text.config(text=text)
@@ -267,6 +272,46 @@ class CheckRow:
             self.btn.grid()
         else:
             self.btn.grid_remove()
+
+
+def pick_process(parent, preselect=()):
+    """Small dialog listing running programs; returns the chosen name or None."""
+    names = procmem.list_process_names()
+    win = tk.Toplevel(parent)
+    win.title("Pick your game's program")
+    win.transient(parent.winfo_toplevel())
+    win.grab_set()
+    ttk.Label(win, padding=(10, 8, 10, 0), wraplength=420, text=(
+        "Start the game (or emulator) first, then pick its program below. For a game the app doesn't know, "
+        "bind its ocarina notes to the virtual pad's LB, RB, B, X and Y in the game's own settings, and use "
+        "More settings > Game Flag to find the ocarina flag.")).pack(anchor="w")
+    filt = tk.StringVar()
+    ttk.Entry(win, textvariable=filt, width=40).pack(fill="x", padx=10, pady=6)
+    lb = tk.Listbox(win, height=14, width=48)
+    lb.pack(fill="both", expand=True, padx=10)
+    result = {"name": None}
+
+    def fill(*_):
+        lb.delete(0, "end")
+        q = filt.get().lower()
+        for n in names:
+            if q in n.lower():
+                lb.insert("end", n)
+    filt.trace_add("write", fill)
+    fill()
+
+    def choose(*_):
+        sel = lb.curselection()
+        if sel:
+            result["name"] = lb.get(sel[0])
+            win.destroy()
+    lb.bind("<Double-Button-1>", choose)
+    row = ttk.Frame(win, padding=10)
+    row.pack(fill="x")
+    ttk.Button(row, text="Use this program", command=choose).pack(side="right")
+    ttk.Button(row, text="Cancel", command=win.destroy).pack(side="right", padx=6)
+    win.wait_window()
+    return result["name"]
 
 
 class LevelMeter(tk.Canvas):
@@ -293,8 +338,20 @@ class LevelMeter(tk.Canvas):
 
 # ---- Setup ---------------------------------------------------------------
 class SetupTab(Tab):
+    OTHER = "Other (pick a running program)…"
+
     def __init__(self, parent, app):
         super().__init__(parent, app)
+        gbox = ttk.LabelFrame(self, text="Game", padding=10)
+        gbox.pack(fill="x", pady=(0, 10))
+        self.game_cb = ttk.Combobox(gbox, state="readonly", width=40)
+        self.game_cb.bind("<<ComboboxSelected>>", lambda e: self._game_changed())
+        self.game_cb.grid(row=0, column=0, sticky="w")
+        ttk.Button(gbox, text="Detect running game", command=self._detect_game).grid(row=0, column=1, padx=8)
+        self.game_note = ttk.Label(gbox, foreground="#a60", wraplength=820, justify="left")
+        self.game_note.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._fill_games()
+
         box = ttk.LabelFrame(self, text="Microphone", padding=10)
         box.pack(fill="x")
         self.devices = audio.input_devices()
@@ -336,6 +393,54 @@ class SetupTab(Tab):
     def on_show(self):
         self.refresh(scan_processes=True)
 
+    # -- which game ----------------------------------------------------------
+    def _fill_games(self):
+        self._game_ids = [g.id for g in games.choices()]
+        self.game_cb.config(values=[g.name for g in games.choices()] + [self.OTHER])
+        g = games.active()
+        self.game_cb.set(f"Other: {g.name}" if g.id == games.CUSTOM_ID else g.name)
+
+    def _set_game(self, gid, process=""):
+        cfg = self.app.cfg
+        if self.app.engine:
+            messagebox.showwarning("Ocarina Translator", "Stop playing first (Play tab), then change the game.")
+            self._fill_games()
+            return
+        cfg["game"] = gid
+        if gid == games.CUSTOM_ID:
+            cfg["custom_process"] = process
+        games.activate(cfg)
+        self.app.save()
+        self.app.overlay.restart()
+        self._fill_games()
+        self._state = {}
+        self.refresh(scan_processes=True)
+
+    def _game_changed(self):
+        choice = self.game_cb.get()
+        if choice == self.OTHER:
+            proc = pick_process(self, games.active().process_names()[:1])
+            if proc:
+                self._set_game(games.CUSTOM_ID, proc)
+            else:
+                self._fill_games()
+            return
+        names = [g.name for g in games.choices()]
+        if choice in names:
+            self._set_game(self._game_ids[names.index(choice)])
+
+    def _detect_game(self):
+        found = games.detect_running()
+        if not found:
+            messagebox.showinfo("Ocarina Translator", "None of the games this app knows is running. Start your "
+                                                      "game, or pick \"Other\" to choose any running program.")
+        elif len(found) == 1:
+            self._set_game(found[0].id)
+            messagebox.showinfo("Ocarina Translator", f"Found {found[0].name} -- selected it.")
+        else:
+            messagebox.showinfo("Ocarina Translator", "More than one known game is running: " +
+                                ", ".join(g.name for g in found) + ". Pick one from the list.")
+
     # -- checklist ---------------------------------------------------------
     def refresh(self, scan_processes=False):
         if self._refreshing:
@@ -346,11 +451,13 @@ class SetupTab(Tab):
             self._last_proc_scan = -999.0
         cfg = self.app.cfg
 
+        gid = games.active().id
+
         def collect():
-            st = {"vigem": setup_helpers.vigem_installed(), "running": game_running()}
+            st = {"_game": gid, "vigem": setup_helpers.vigem_installed(), "running": game_running()}
             if st["running"]:
                 st["exe"] = setup_helpers._running_exe_path()
-            st["ini"] = setup_helpers.find_ini(cfg.get("longshot_ini", ""))
+            st["ini"] = setup_helpers.find_ini(games.paths(cfg).get("ini", ""))
             st["bindings"] = setup_helpers.bindings_ok(st["ini"]) if st["ini"] else False
             st["background"] = setup_helpers.background_input_ok(st["ini"]) if st["ini"] else False
             st["gamemic"] = setup_helpers.game_mic_off(st["ini"]) if st["ini"] else False
@@ -367,12 +474,16 @@ class SetupTab(Tab):
 
         def done(st):
             self._refreshing = False
+            if st.get("_game") != games.active().id:   # the game was switched while this was running
+                self.refresh(scan_processes=True)
+                return
             self._state.update(st)
             changed = False
-            if st.get("ini") and st["ini"] != cfg.get("longshot_ini"):
-                cfg["longshot_ini"], changed = st["ini"], True
-            if st.get("exe") and st["exe"] != cfg.get("longshot_exe"):
-                cfg["longshot_exe"], changed = st["exe"], True
+            gp = games.paths(cfg)
+            if st.get("ini") and st["ini"] != gp.get("ini"):
+                gp["ini"], changed = st["ini"], True
+            if st.get("exe") and st["exe"] != gp.get("exe"):
+                gp["exe"], changed = st["exe"], True
             if changed:
                 self.app.save()
             self._render()
@@ -385,6 +496,9 @@ class SetupTab(Tab):
     def _render(self):
         st, cfg, r = self._state, self.app.cfg, self.rows
         running = st.get("running", False)
+        game = games.active()
+        G = game.name
+        self.game_note.config(text=game.setup_note)
 
         if st.get("vigem"):
             r["driver"].set(True, setup_helpers.DRIVER_OK_TEXT)
@@ -393,43 +507,57 @@ class SetupTab(Tab):
                             "Get driver" if setup_helpers.IS_WINDOWS else "How to fix",
                             lambda: webbrowser.open(setup_helpers.DRIVER_URL))
 
-        if not st.get("ini"):
-            r["bindings"].set(False, "Couldn't find Longshot's settings file (longshot_options.ini)",
-                              "Find…", self._browse_ini)
-        elif not st.get("bindings"):
-            r["bindings"].set(False, "Ocarina notes aren't bound to the controller yet" +
-                              (" -- close Longshot first" if running else ""), "Apply bindings", self._apply)
+        close_first = f" -- close {G} first" if running else ""
+        if not game.settings_file:
+            if game.setup_note:
+                note = "bind its ocarina notes to the virtual pad yourself (see above)"
+            else:
+                note = "nothing to check in its settings"
+            r["bindings"].set(None, f"{G}: {note}", na=True)
+            r["background"].set(None, f"Background controller input: check {G}'s own settings", na=True)
+            r["gamemic"].set(None, f"If {G} has its own microphone input, turn it off", na=True)
         else:
-            r["bindings"].set(True, "Ocarina notes are bound to the controller in Longshot")
+            if not st.get("ini"):
+                r["bindings"].set(False, f"Couldn't find {G}'s settings file ({game.settings_file})",
+                                  "Find…", self._browse_ini)
+            elif not game.note_slots:
+                r["bindings"].set(True, f"{G}'s ocarina uses its normal A/L/R/X/Y buttons -- nothing to bind")
+            elif not st.get("bindings"):
+                r["bindings"].set(False, "Ocarina notes aren't bound to the controller yet" + close_first,
+                                  "Apply bindings", self._apply)
+            else:
+                r["bindings"].set(True, f"Ocarina notes are bound to the controller in {G}")
 
-        if not st.get("ini"):
-            r["background"].set(None, "Background controller input: needs Longshot's settings file")
-        elif not st.get("background"):
-            r["background"].set(False, "Notes only reach Longshot while its window is focused" +
-                                (" -- close Longshot first" if running else ""), "Fix", self._apply_background)
-        else:
-            r["background"].set(True, "Notes reach Longshot even when another window is focused")
+            if not st.get("ini"):
+                r["background"].set(None, f"Background controller input: needs {G}'s settings file")
+            elif not st.get("background"):
+                r["background"].set(False, f"Notes only reach {G} while its window is focused" + close_first,
+                                    "Fix", self._apply_background)
+            else:
+                r["background"].set(True, f"Notes reach {G} even when another window is focused")
 
-        if not st.get("ini"):
-            r["gamemic"].set(None, "Longshot's own microphone: needs Longshot's settings file")
-        elif not st.get("gamemic"):
-            r["gamemic"].set(False, "Longshot's own microphone input is on -- it will fight with this app" +
-                             (" (close Longshot first)" if running else ""), "Turn it off",
-                             lambda: self._ini_fix(setup_helpers.turn_off_game_mic,
-                                                   "Longshot's own microphone input is now off."))
-        else:
-            r["gamemic"].set(True, "Longshot's own microphone input is off")
+            if not st.get("ini"):
+                r["gamemic"].set(None, f"{G}'s own microphone: needs {G}'s settings file")
+            elif not st.get("gamemic"):
+                r["gamemic"].set(False, f"{G}'s own microphone input is on -- it will fight with this app" +
+                                 (f" (close {G} first)" if running else ""), "Turn it off",
+                                 lambda: self._ini_fix(setup_helpers.turn_off_game_mic,
+                                                       f"{G}'s own microphone input is now off."))
+            else:
+                r["gamemic"].set(True, f"{G}'s own microphone input is off")
 
-        if running:
-            r["game"].set(True, "Longshot is running")
+        if game.id == games.CUSTOM_ID and not cfg.get("custom_process"):
+            r["game"].set(False, "No game chosen -- pick one at the top of this tab")
+        elif running:
+            r["game"].set(True, f"{G} is running")
         else:
-            r["game"].set(False, "Longshot isn't running", "Start Longshot" if setup_helpers.can_start_longshot(cfg)
+            r["game"].set(False, f"{G} isn't running", f"Start {G}" if setup_helpers.can_start_game(cfg)
                           else None, self._start_game)
 
         others = st.get("others", [])
         if others:
             r["dupes"].set(False, f"{len(others)} other translator process(es) running -- their virtual "
-                                  "controller can make Longshot ignore this one", "Close them", self._close_dupes)
+                                  "controller can make the game ignore this one", "Close them", self._close_dupes)
         else:
             r["dupes"].set(True, "No other translator running")
 
@@ -454,20 +582,26 @@ class SetupTab(Tab):
             r["flag"].set(None, "Game flag not used -- listening " +
                           ("while Scroll Lock is on" if mode == "hotkey" else "all the time") + " (More settings > Play options)")
         elif not running:
-            r["flag"].set(None, "Game flag: start Longshot to check it")
+            r["flag"].set(None, f"Game flag: start {G} to check it")
         elif st.get("memerr"):
             r["flag"].set(False, st["memerr"], "How to fix",
                           lambda: webbrowser.open(setup_helpers.LINUX_SETUP_URL))
         elif st.get("flag") is None:
-            r["flag"].set(False, "Game flag not found (a Longshot update may have moved it) -- using Scroll Lock "
-                                 "until it's found", "Find flag", self.app.go_flag_scan)
+            if game.flag_offsets():
+                why = f"a {G} update may have moved it"
+            else:
+                why = f"not found automatically for {G} yet"
+            r["flag"].set(False, f"Game flag not found ({why}) -- using Scroll Lock until it's found",
+                          "Find flag", self.app.go_flag_scan)
         else:
             r["flag"].set(True, ("Game flag found automatically" if st.get("flag_auto") else "Game flag working")
                           + f" -- ocarina is {'up' if st['flag'] else 'put away'}")
 
         self._render_play()
-        ready = sum(1 for row in r.values() if row.ok)
-        self.ready_lbl.config(text=f"{ready} of {len(r)} ready" + ("  -- all set!" if ready == len(r) else ""))
+        counted = [row for row in r.values() if not row.na]
+        ready = sum(1 for row in counted if row.ok)
+        self.ready_lbl.config(text=f"{ready} of {len(counted)} ready" +
+                              ("  -- all set!" if ready == len(counted) else ""))
 
     def _render_play(self):
         eng = self.app.engine
@@ -480,8 +614,8 @@ class SetupTab(Tab):
 
     def _start_game(self):
         try:
-            setup_helpers.start_longshot(self.app.cfg)
-            self.rows["game"].set(None, "Starting Longshot…")
+            setup_helpers.start_game(self.app.cfg)
+            self.rows["game"].set(None, f"Starting {games.active().name}…")
             self.app.after(6000, self.refresh)
         except Exception as e:
             messagebox.showerror("Ocarina Translator", str(e))
@@ -532,16 +666,17 @@ class SetupTab(Tab):
         self.app.run_bg(lambda: audio.measure_noise_floor(self.app.monitor), done)
 
     def _browse_ini(self):
-        p = filedialog.askopenfilename(title="Find longshot_options.ini",
-                                       filetypes=[("Longshot settings", "longshot_options.ini"), ("INI", "*.ini")])
+        g = games.active()
+        p = filedialog.askopenfilename(title=f"Find {g.settings_file}",
+                                       filetypes=[(f"{g.name} settings", g.settings_file), ("INI", "*.ini")])
         if p:
-            self.app.cfg["longshot_ini"] = p
+            games.paths(self.app.cfg)["ini"] = p
             self.app.save()
             self.refresh()
 
     def _ini_fix(self, fn, done_msg):
         try:
-            backup = fn(self.app.cfg["longshot_ini"])
+            backup = fn(games.paths(self.app.cfg)["ini"])
             messagebox.showinfo("Ocarina Translator", f"{done_msg}\n\nBackup saved:\n{backup}")
         except Exception as e:
             messagebox.showerror("Ocarina Translator", str(e))
@@ -549,8 +684,8 @@ class SetupTab(Tab):
 
     def _apply_background(self):
         try:
-            backup = setup_helpers.apply_background_input(self.app.cfg["longshot_ini"])
-            messagebox.showinfo("Ocarina Translator", "Longshot will now take controller input even when "
+            backup = setup_helpers.apply_background_input(games.paths(self.app.cfg)["ini"])
+            messagebox.showinfo("Ocarina Translator", f"{games.active().name} will now take controller input even when "
                                                       f"it isn't the focused window.\n\nBackup saved:\n{backup}")
         except Exception as e:
             messagebox.showerror("Ocarina Translator", str(e))
@@ -558,7 +693,7 @@ class SetupTab(Tab):
 
     def _apply(self):
         try:
-            backup = setup_helpers.apply_bindings(self.app.cfg["longshot_ini"])
+            backup = setup_helpers.apply_bindings(games.paths(self.app.cfg)["ini"])
             messagebox.showinfo("Ocarina Translator", f"Bindings applied. Backup saved:\n{backup}")
         except Exception as e:
             messagebox.showerror("Ocarina Translator", str(e))
@@ -596,7 +731,7 @@ class SoundStartupTab(Tab):
         self.gs_lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         self.auto_on = tk.BooleanVar(value=setup_helpers.autostart_enabled())
-        ttk.Checkbutton(self, text="Start automatically when Longshot starts (runs hidden in the background "
+        ttk.Checkbutton(self, text="Start automatically when the game starts (runs hidden in the background "
                                    "after you log in to Windows, then opens and starts playing)",
                         variable=self.auto_on, command=self._auto_changed).pack(anchor="w", pady=(12, 0))
 
@@ -977,14 +1112,14 @@ class PlayOptionsTab(Tab):
                                    "away (the mic stays on)", variable=self.extras_away,
                         command=self._extras_changed).pack(anchor="w", pady=(4, 0))
         self.focus_on = tk.BooleanVar(value=app.cfg.get("focus_game_on_note", True))
-        ttk.Checkbutton(mode, text="Bring Longshot to the front when a note is played (so your controller "
+        ttk.Checkbutton(mode, text="Bring the game to the front when a note is played (so your controller "
                                    "works straight away)", variable=self.focus_on,
                         command=self._focus_changed).pack(anchor="w", pady=(4, 0))
 
         pop = ttk.LabelFrame(self, text="Fingering pop-up", padding=8)
         pop.pack(fill="x", pady=(8, 0))
         ov = app.overlay.cfg
-        ttk.Label(pop, text="Turn it on from the Play tab. Drag it to move it; Longshot must be windowed or "
+        ttk.Label(pop, text="Turn it on from the Play tab. Drag it to move it; the game must be windowed or "
                             "borderless.", foreground="#666").pack(anchor="w")
         size = ttk.Frame(pop)
         size.pack(anchor="w", pady=(4, 0))
@@ -1073,8 +1208,9 @@ class FlagTab(Tab):
     def __init__(self, parent, app):
         super().__init__(parent, app)
         ttk.Label(self, wraplength=820, justify="left", text=(
-            "The translator reads a value in Longshot's memory to know when the ocarina is up. It's found "
-            "automatically each time Longshot starts. Only if that stops working (e.g. after a Longshot update) "
+            "The translator reads a value in the game's memory to know when the ocarina is up. For games it knows "
+            "(e.g. Longshot) it's found automatically each time the game starts. Only if that stops working (e.g. "
+            "after a game update, or for a game it doesn't know yet) "
             "use 'Find it manually' below.")
         ).pack(anchor="w")
         cur = ttk.LabelFrame(self, text="Current flag", padding=8)
@@ -1084,7 +1220,7 @@ class FlagTab(Tab):
 
         self.show_scan = ttk.Button(self, text="Find it manually…", command=self._show_scan)
         self.show_scan.pack(anchor="w")
-        scan = ttk.LabelFrame(self, text="Find it manually (Longshot must be running; the first capture "
+        scan = ttk.LabelFrame(self, text="Find it manually (the game must be running; the first capture "
                                           "briefly uses a few GB of RAM)", padding=8)
         self.scan_frame = scan
         self.instr = ttk.Label(scan, font=MID, wraplength=800)
@@ -1106,7 +1242,7 @@ class FlagTab(Tab):
         self.flag = None
         self.best = None
         self._last_poll = 0
-        self.instr.config(text="With Longshot running and your save loaded, click Start scan. It takes 2-4 "
+        self.instr.config(text="With the game running and your save loaded, click Start scan. It takes 2-4 "
                                "rounds of putting the ocarina away and taking it out.")
         self._set_buttons(idle=True)
 
@@ -1142,7 +1278,7 @@ class FlagTab(Tab):
     def _start(self):
         self._show_scan()
         if not game_running():
-            messagebox.showwarning("Ocarina Translator", "Start Longshot and load your save first.")
+            messagebox.showwarning("Ocarina Translator", "Start the game and load your save first.")
             return
         if self.app.engine:
             messagebox.showwarning("Ocarina Translator", "Stop the Play tab first.")
