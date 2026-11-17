@@ -205,12 +205,21 @@ def turn_off_game_mic(path):
     return _set_ini(path, "microphone", "0")
 
 
+def _backup(path):
+    """Copy the settings file next to itself; never overwrite an earlier backup."""
+    stem = f"{path}.ocarina-backup-{time.strftime('%Y%m%d-%H%M%S')}"
+    backup, i = stem, 2
+    while os.path.exists(backup):
+        backup, i = f"{stem}-{i}", i + 1
+    shutil.copy2(path, backup)
+    return backup
+
+
 def _set_ini(path, key, value):
     if game_running():
         raise RuntimeError("Close Longshot first -- it overwrites this file when it exits.")
     lines, _ = _parse(path)
-    backup = f"{path}.ocarina-backup-{time.strftime('%Y%m%d-%H%M%S')}"
-    shutil.copy2(path, backup)
+    backup = _backup(path)
     for i, line in enumerate(lines):
         if line.split("=", 1)[0].strip() == key:
             lines[i] = f"{key}={value}"
@@ -227,8 +236,7 @@ def apply_background_input(path):
     if game_running():
         raise RuntimeError("Close Longshot first -- it overwrites this file when it exits.")
     lines, _ = _parse(path)
-    backup = f"{path}.ocarina-backup-{time.strftime('%Y%m%d-%H%M%S')}"
-    shutil.copy2(path, backup)
+    backup = _backup(path)
     for i, line in enumerate(lines):
         if line.split("=", 1)[0].strip() == "controller_in_background":
             lines[i] = "controller_in_background=1"
@@ -253,8 +261,7 @@ def apply_bindings(path):
     missing = [k for k, v in wanted.items() if v is None]
     if missing:
         raise RuntimeError(f"Couldn't find your normal button bindings for {missing} in {path}")
-    backup = f"{path}.ocarina-backup-{time.strftime('%Y%m%d-%H%M%S')}"
-    shutil.copy2(path, backup)
+    backup = _backup(path)
     done = set()
     for i, line in enumerate(lines):
         if "=" in line:
