@@ -30,7 +30,7 @@ Your real controller keeps working alongside it.
 
 | | |
 |---|---|
-| **PC** | Windows 10 or 11 |
+| **PC** | Windows 10 or 11 ([Linux: test build](#linux-test-build)) |
 | **Game** | Longshot, run **windowed or borderless** (needed for the fingering pop-up) |
 | **Ocarina** | A 12-hole Alto C ocarina. We built and tested everything with this 3D-printed one: [Printables model #474058](https://www.printables.com/model/474058). Others work, but the fingering pictures assume a 12-hole Alto C. |
 | **Microphone** | Any mic; a headset or webcam mic is fine |
@@ -145,6 +145,23 @@ the d-pad, sticks, triggers or Start.
   default.
 - Set the pitch by typing it, picking a note name, or clicking **Listen** and
   playing it.
+
+## Linux (test build)
+
+There's an **experimental Linux version** you can try:
+**[v1.1.1-linux-test](https://github.com/maplerouteadmin-dev/longshot-ocarina/releases/tag/v1.1.1-linux-test)**.
+It runs from source; the release notes have the install steps.
+
+Honest caveat: I don't have hardware that can run Longshot on Linux, so it
+hasn't been tested with the real game yet. It has been tested in an Ubuntu VM
+against a stand-in for the game: the setup steps, the virtual controller, note
+detection, the game-sound filter, the pop-up and autostart all work there. If
+you play Longshot on Linux, please try it and report back on
+[issue #1](https://github.com/maplerouteadmin-dev/longshot-ocarina/issues/1).
+Help is especially wanted with the real game accepting the virtual controller,
+finding the game flag automatically, and Wayland support. The full Linux
+instructions are in the
+[`linux-support` branch README](https://github.com/maplerouteadmin-dev/longshot-ocarina/tree/linux-support#linux-experimental).
 
 ## Troubleshooting
 
