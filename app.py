@@ -674,8 +674,8 @@ class CalibrateTab(Tab):
             self.img_lbl.config(image="")
             self.finger_note.config(text=f"{d['label']}: play any note that isn't one of your five ocarina "
                                          "notes (e.g. a C or G), then record it like the others. Leave it "
-                                         "uncalibrated if you don't want it. It works with the ocarina up or "
-                                         "put away.")
+                                         "uncalibrated if you don't want it. It also works with the ocarina put "
+                                         "away unless you turn that off on the Play tab.")
             self._show_takes()
             return
         path = os.path.join(diagram.OUT_DIR, f"{d['pitch']}.png")
@@ -857,6 +857,10 @@ class PlayTab(Tab):
                             ("always", "Always (testing only -- sounds can move your character)")]:
             ttk.Radiobutton(mode, text=text, value=value, variable=self.mode,
                             command=self._mode_changed).pack(anchor="w")
+        self.extras_away = tk.BooleanVar(value=app.cfg.get("extras_when_away", True))
+        ttk.Checkbutton(mode, text="Also listen for D-pad left and custom mappings while the ocarina is put "
+                                   "away (the mic stays on)", variable=self.extras_away,
+                        command=self._extras_changed).pack(anchor="w", pady=(4, 0))
 
         pop = ttk.LabelFrame(self, text="Fingering pop-up (for learning)", padding=8)
         pop.pack(fill="x", pady=(8, 0))
@@ -903,6 +907,12 @@ class PlayTab(Tab):
         self.held.pack(pady=6)
         self.log = tk.Text(self, height=10, state="disabled")
         self.log.pack(fill="both", expand=True)
+
+    def _extras_changed(self):
+        self.app.cfg["extras_when_away"] = self.extras_away.get()
+        self.app.save()
+        if self.app.engine:
+            self._log("Listening change applies next time you press Start.")
 
     def _focus_changed(self):
         self.app.cfg["focus_game_on_note"] = self.focus_on.get()

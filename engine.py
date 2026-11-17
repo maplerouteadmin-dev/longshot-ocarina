@@ -147,6 +147,8 @@ class Engine:
         notes = dict(config.note_freqs(self.cfg))
         # extra notes (D-pad left) work whether the ocarina is up or put away
         self.free_keys |= {d["button"] for d in config.EXTRA_DEFS if d["button"] in notes}
+        if not self.cfg.get("extras_when_away", True):
+            self.free_keys = set()          # user wants nothing heard while the ocarina is put away
         notes.update({k: float(m["hz"]) for k, m in customs.items()})
         self.matcher = NoteMatcher(notes, config.match_params(self.cfg))
         self.flag = GameFlag(**self.cfg["flag"])

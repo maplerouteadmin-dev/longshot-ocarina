@@ -63,6 +63,7 @@ DEFAULTS = {
     # fingering pop-up over the game while the ocarina is up; learned = buttons to hide
     "overlay": {"enabled": False, "learned": [], "x": None, "y": None},
     "focus_game_on_note": True,
+    "extras_when_away": True,     # D-pad left + custom mappings also heard with the ocarina put away
     # extra pitch -> any controller input mappings (Play tab > Custom mappings)
     "custom": [],
 }

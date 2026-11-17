@@ -135,7 +135,9 @@ the d-pad, sticks, triggers or Start.
 - **Timed**: pressed for a set time, with an optional delay. For example, one
   note pushes the left stick forward for 10 seconds.
 - Works with the ocarina put away too, so you can try playing the whole game
-  with an ocarina if you're brave enough.
+  with an ocarina if you're brave enough. Don't want the mic listening while
+  the ocarina is away? Untick *Also listen for D-pad left and custom
+  mappings…* under **When to listen** on the Play tab.
 - Set the pitch by typing it, picking a note name, or clicking **Listen** and
   playing it.
 

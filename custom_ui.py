@@ -109,7 +109,7 @@ class CustomMappings:
         of = ttk.Frame(ed)
         of.grid(row=r, column=0, columnspan=5, sticky="w", pady=(2, 0))
         ttk.Button(of, text="Save mapping", command=self._save).pack(side="left")
-        ttk.Label(of, text="Mappings work whether the ocarina is up or put away.",
+        ttk.Label(of, text="Mappings also work with the ocarina put away (switch on the Play tab).",
                   foreground="#666").pack(side="left", padx=10)
         self._refresh_list()
 
