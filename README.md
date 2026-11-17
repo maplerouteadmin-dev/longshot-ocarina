@@ -16,7 +16,7 @@ Your real controller keeps working alongside it.
 <!-- SCREENSHOT / GIF: replace this comment with e.g.
 ![Playing the ocarina in Longshot with the fingering pop-up](docs/demo.gif) -->
 
-> Tested with **Longshot v3.0.0-rc.3**. A Longshot update can move the in-game
+> Tested with **Longshot v3.0.0-rc.3 and rc.5**. A Longshot update can move the in-game
 > flag the app reads; if the Setup tab then says the game flag isn't found, use
 > **Game Flag → Find it manually** (everything else keeps working).
 
