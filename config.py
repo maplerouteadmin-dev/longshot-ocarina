@@ -84,17 +84,13 @@ def save(cfg):
 
 
 def _migrate_old(cfg):
-    """Carry over the earlier notes.json calibration and the found flag address."""
+    """Carry over the earlier prototype's notes.json calibration, if present."""
     old = os.path.join(app_dir(), "notes.json")
     if not os.path.exists(old):
         return
     with open(old, "r", encoding="utf-8") as f:
         for button, hz in json.load(f).items():
             cfg["notes"][button] = {"hz": hz, "spread_cents": 0.0, "takes": [hz]}
-    # the original prototype's setup on the machine it was built on
-    cfg["mic_name"] = "C922"
-    cfg["flag"]["address"] = 0x1F812A0F784
-    cfg["longshot_ini"] = r"A:\Games\longshot\longshot_options.ini"
 
 
 def note_freqs(cfg):

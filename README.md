@@ -13,6 +13,13 @@ Your real controller keeps working alongside it.
 - Ignores the game's own sounds when you play out loud through TV speakers.
 - Can start by itself when Longshot starts.
 
+<!-- SCREENSHOT / GIF: replace this comment with e.g.
+![Playing the ocarina in Longshot with the fingering pop-up](docs/demo.gif) -->
+
+> Tested with **Longshot v3.0.0-rc.3**. A Longshot update can move the in-game
+> flag the app reads; if the Setup tab then says the game flag isn't found, use
+> **Game Flag → Find it manually** (everything else keeps working).
+
 > Not affiliated with Nintendo or the Longshot project. You need your own copy
 > of Longshot; nothing from the game is included here.
 
@@ -37,6 +44,14 @@ Your real controller keeps working alongside it.
 
 Windows SmartScreen may warn about an unknown app the first time. Click *More
 info → Run anyway*.
+
+**Antivirus warnings:** some antivirus tools may flag the exe. It's a
+single-file PyInstaller app (it unpacks Python to a temp folder when it
+starts), and it reads another program's memory (Longshot's, to see whether the
+ocarina is out). Both of those look suspicious to heuristic scanners. It only
+*reads* that one value and never writes to the game. If you'd rather not trust
+a downloaded exe, [build it from source](#build-from-source). It's the same
+code.
 
 ## First-time setup
 
@@ -150,8 +165,8 @@ python app.py
 - **Ocarina flag:** Longshot runs the game inside one large block of emulated
   console memory. The flag sits at fixed offsets inside it, so the app reads 31
   of them and takes a majority vote (`ocarina_flag.py`, `flag_spots.py`). If a
-  Longshot update moves them, `arena_scan.py` finds them again. See
-  `FLAG_POINTER_NOTES.md`.
+  Longshot update moves them, `tools\arena_scan.py` finds them again. See
+  `tools\FLAG_POINTER_NOTES.md`.
 - **Output:** a virtual Xbox 360 pad via ViGEmBus (`vgamepad`).
 
 | File | What it does |
@@ -161,10 +176,16 @@ python app.py
 | `audio.py`, `pitch.py`, `matcher.py` | mic input, pitch detection, note decisions |
 | `echo.py` | game-sound filter (speaker loopback) |
 | `ocarina_flag.py`, `flag_spots.py` | read the "ocarina is up" flag |
-| `flag_scan.py`, `memscan.py`, `arena_scan.py`, `ptrscan.py`, `flag_probe.py` | tools for finding the flag |
+| `flag_scan.py`, `memscan.py` | the manual flag scan (Game Flag tab) |
+| `tools/` | developer tools used to find the flag (`arena_scan.py`, `ptrscan.py`, `flag_probe.py`) and notes |
+| `version.py` | the app version shown in the title bar |
 | `overlay.py` | fingering pop-up |
 | `custom_ui.py`, `gamepad.py`, `gamewin.py` | custom mappings, virtual pad, game window focus |
 | `setup_helpers.py` | driver check, Longshot ini settings, autostart |
 | `calibration.py`, `fingering.py`, `diagram.py` | calibration and fingering charts |
 | `translator.py`, `calibrate.py` | older command-line versions |
 | `build.bat` | builds the exe |
+
+## License
+
+[MIT](LICENSE) © 2026 Jon Parkhill

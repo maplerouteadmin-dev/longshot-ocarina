@@ -36,6 +36,7 @@ from matcher import MatchParams, NoteMatcher
 from ocarina_flag import GameFlag, game_running
 from custom_ui import CustomMappings
 from overlay import FingeringOverlay
+from version import __version__
 
 BIG = ("Segoe UI", 28, "bold")
 MID = ("Segoe UI", 14)
@@ -46,7 +47,7 @@ WAIT_FOR_NOTE = 15.0  # seconds Record waits for you to start playing
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Ocarina Translator")
+        self.title(f"Ocarina Translator v{__version__}")
         self.geometry("920x860")
         self.minsize(840, 760)
         self.cfg = config.load()

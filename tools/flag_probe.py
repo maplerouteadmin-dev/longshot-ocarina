@@ -6,7 +6,7 @@ allocation's base/size, the flag's offset in it, and how many other
 allocations share that exact size. Run it after each Longshot restart +
 re-scan and compare the offset/size lines.
 """
-import ctypes, ctypes.wintypes as wt, json, sys
+import ctypes, ctypes.wintypes as wt, json, os, sys
 import pymem
 
 class MBI(ctypes.Structure):
@@ -34,7 +34,7 @@ def main():
     if len(sys.argv) > 1:
         flag = int(sys.argv[1], 16)
     else:
-        cfg = json.load(open(r"dist\config.json"))
+        cfg = json.load(open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dist", "config.json")))
         flag = int(str(cfg["flag"]["address"]), 0)
     pm = pymem.Pymem("longshot.exe")
     allocs = allocations(pm.process_handle)

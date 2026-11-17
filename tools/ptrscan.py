@@ -14,6 +14,7 @@ import pymem
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHAINS = os.path.join(HERE, "ptr_chains.json")
+APP_DIR = os.path.dirname(HERE)
 MAX_DEPTH = int(os.environ.get("PS_DEPTH", 4))
 FIRST_OFF = 0x20000     # the flag may sit deep inside a big game-state struct
 MAX_OFF = int(os.environ.get("PS_OFF", "0x2000"), 0)
@@ -156,7 +157,7 @@ def show():
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "scan"
     if cmd == "scan":
-        cfg = json.load(open(os.path.join(HERE, "dist", "config.json")))
+        cfg = json.load(open(os.path.join(APP_DIR, "dist", "config.json")))
         scan(int(cfg["flag"]["address"]))
     elif cmd == "check":
         check(int(sys.argv[2]))
