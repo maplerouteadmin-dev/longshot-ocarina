@@ -326,7 +326,7 @@ class SetupTab(Tab):
         self.ready_lbl = ttk.Label(chk, font=MID)
         self.ready_lbl.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
         self.rows = {}
-        for i, key in enumerate(["driver", "bindings", "background", "game", "dupes", "noise", "notes", "flag", "play"]):
+        for i, key in enumerate(["driver", "bindings", "background", "gamemic", "game", "dupes", "noise", "notes", "flag", "play"]):
             self.rows[key] = CheckRow(chk, i + 1)
         chk.columnconfigure(0, weight=1)
         self._state = {}
@@ -355,6 +355,7 @@ class SetupTab(Tab):
             st["ini"] = setup_helpers.find_ini(cfg.get("longshot_ini", ""))
             st["bindings"] = setup_helpers.bindings_ok(st["ini"]) if st["ini"] else False
             st["background"] = setup_helpers.background_input_ok(st["ini"]) if st["ini"] else False
+            st["gamemic"] = setup_helpers.game_mic_off(st["ini"]) if st["ini"] else False
             f = cfg["flag"]
             st["flag"] = st["flag_auto"] = None
             if st["running"]:
@@ -408,6 +409,16 @@ class SetupTab(Tab):
                                 (" -- close Longshot first" if running else ""), "Fix", self._apply_background)
         else:
             r["background"].set(True, "Notes reach Longshot even when another window is focused")
+
+        if not st.get("ini"):
+            r["gamemic"].set(None, "Longshot's own microphone: needs Longshot's settings file")
+        elif not st.get("gamemic"):
+            r["gamemic"].set(False, "Longshot's own microphone input is on -- it will fight with this app" +
+                             (" (close Longshot first)" if running else ""), "Turn it off",
+                             lambda: self._ini_fix(setup_helpers.turn_off_game_mic,
+                                                   "Longshot's own microphone input is now off."))
+        else:
+            r["gamemic"].set(True, "Longshot's own microphone input is off")
 
         if running:
             r["game"].set(True, "Longshot is running")
@@ -547,6 +558,14 @@ class SetupTab(Tab):
             self.app.cfg["longshot_ini"] = p
             self.app.save()
             self.refresh()
+
+    def _ini_fix(self, fn, done_msg):
+        try:
+            backup = fn(self.app.cfg["longshot_ini"])
+            messagebox.showinfo("Ocarina Translator", f"{done_msg}\n\nBackup saved:\n{backup}")
+        except Exception as e:
+            messagebox.showerror("Ocarina Translator", str(e))
+        self.refresh()
 
     def _apply_background(self):
         try:

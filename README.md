@@ -63,8 +63,14 @@ isn't done yet.
    - Pick your microphone. The level bar should move when you play.
    - **Close Longshot**, then click **Apply bindings**. This points Longshot's
      ocarina-note slots at the virtual controller. Then click **Fix** next to
-     *"Notes only reach Longshot while its window is focused"*. Both back up
-     `longshot_options.ini` first.
+     *"Notes only reach Longshot while its window is focused"*, and **Turn it
+     off** next to *"Longshot's own microphone input is on"*. All of these back
+     up `longshot_options.ini` first.
+   - **Turn off Longshot's own microphone input.** Longshot has a built-in
+     "Listening for audio…" mic feature. If it's on as well as this app, the
+     game hears your ocarina too, and the two fight over every note. The Setup
+     checklist does this for you (it sets `microphone=0`), or you can turn it
+     off in Longshot's own settings.
    - Start Longshot and load your save. Then click **Measure background
      noise** and stay quiet for 2 seconds, with the game running at your usual
      volume.
@@ -133,6 +139,7 @@ the d-pad, sticks, triggers or Start.
 
 | Problem | Try |
 |---|---|
+| The game and the app both react to notes, or notes come out doubled | Turn off Longshot's own microphone input (Setup checklist, with Longshot closed) |
 | Nothing happens in game | Setup checklist: all ✔? Is Play started? Did you apply the bindings with Longshot **closed**? |
 | Notes only work when the game window is clicked | Setup → *Fix* on the background-input line (with Longshot closed) |
 | Wrong note, or notes trigger themselves | Re-measure background noise; recalibrate in the room and at the volume you play in; turn on *Game sounds* if you use speakers |

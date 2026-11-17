@@ -134,6 +134,34 @@ def background_input_ok(path):
     return _parse(path)[1].get("controller_in_background") == "1"
 
 
+def game_mic_off(path):
+    """Longshot has its own microphone input; if it's on as well, the game reacts to your
+    playing on its own and the notes double up / fight with the app's."""
+    return _parse(path)[1].get("microphone", "0") == "0"
+
+
+def turn_off_game_mic(path):
+    """Set microphone=0 (Longshot must be closed). Returns the backup path."""
+    return _set_ini(path, "microphone", "0")
+
+
+def _set_ini(path, key, value):
+    if game_running():
+        raise RuntimeError("Close Longshot first -- it overwrites this file when it exits.")
+    lines, _ = _parse(path)
+    backup = f"{path}.ocarina-backup-{time.strftime('%Y%m%d-%H%M%S')}"
+    shutil.copy2(path, backup)
+    for i, line in enumerate(lines):
+        if line.split("=", 1)[0].strip() == key:
+            lines[i] = f"{key}={value}"
+            break
+    else:
+        lines.append(f"{key}={value}")
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write("\n".join(lines) + "\n")
+    return backup
+
+
 def apply_background_input(path):
     """Set controller_in_background=1 (Longshot must be closed). Returns the backup path."""
     if game_running():
