@@ -148,8 +148,12 @@ the d-pad, sticks, triggers or Start.
 
 ## Linux (experimental)
 
-The app has Linux support, but it has **not been tested on a real Linux
-machine yet**. If you try it, please report back on
+The app has Linux support, but it **hasn't been tested with the real
+Longshot on Linux yet**. I don't have hardware that can run it. It *has*
+been tested in an Ubuntu 22.04 VM (X11) against a stand-in program, covering
+the setup steps, permissions, the virtual controller, the mic-to-button
+pipeline, the game-sound filter, the pop-up, window focus and autostart. If
+you play Longshot on Linux, please report back on
 [issue #1](https://github.com/maplerouteadmin-dev/longshot-ocarina/issues/1).
 
 There's no ready-made Linux binary: run it from source.
@@ -158,14 +162,14 @@ There's no ready-made Linux binary: run it from source.
 git clone -b linux-support https://github.com/maplerouteadmin-dev/longshot-ocarina.git
 cd longshot-ocarina
 # Debian/Ubuntu names shown; use your distro's equivalents
-sudo apt install python3-tk python3-venv python3-dev build-essential xdotool fonts-dejavu-core
+sudo apt install git python3-tk python3-venv python3-dev build-essential libportaudio2 xdotool fonts-dejavu-core
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt       # evdev compiles here, hence python3-dev/build-essential
 python app.py
 ```
 
-Arch/SteamOS: `sudo pacman -S tk python xdotool ttf-dejavu base-devel`. Fedora:
-`sudo dnf install python3-tkinter python3-devel gcc xdotool dejavu-sans-fonts`.
+Arch/SteamOS: `sudo pacman -S git tk python portaudio xdotool ttf-dejavu base-devel`. Fedora:
+`sudo dnf install git python3-tkinter python3-devel gcc portaudio xdotool dejavu-sans-fonts`.
 
 One-time permissions:
 
@@ -175,6 +179,9 @@ One-time permissions:
   echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/60-ocarina-uinput.rules
   sudo usermod -aG input $USER
   ```
+  If the Setup checklist still says *No permission for /dev/uinput* after
+  logging back in (this happened over remote desktop in testing), reboot. You
+  can check with `groups`, which should list `input`.
 - **Reading the ocarina flag:** most distros only let a program read
   another's memory if it started it. Either allow it until the next reboot
   with `sudo sysctl kernel.yama.ptrace_scope=0`, or give Python (or the built
@@ -187,7 +194,10 @@ What to expect:
 - **Ocarina flag:** the automatic lookup isn't set up for the Linux build yet,
   so use **More settings → Game Flag → Find it manually** after each Longshot
   restart. Running `tools/arena_scan.py` on Linux (see
-  `tools/FLAG_POINTER_NOTES.md`) would let us add automatic lookup.
+  `tools/FLAG_POINTER_NOTES.md`) would let us add automatic lookup. Its
+  `report` gives offsets from both the start and the end of the game's memory
+  block, and `test` shows which still works after a restart. On Linux the
+  start can shift, so end-relative offsets may be the steady ones.
 - **Fingering pop-up and bringing the game to the front:** X11 only (needs
   `xdotool`). Wayland doesn't allow either, so on Wayland, including Steam
   Deck gaming mode, the pop-up may not show.
