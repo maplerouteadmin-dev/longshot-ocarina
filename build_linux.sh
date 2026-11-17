@@ -6,7 +6,7 @@ python3 -m PyInstaller --noconfirm --onefile --windowed --name OcarinaTranslator
   --add-data "icon.png:." \
   --collect-all sounddevice \
   --collect-all soundcard \
-  --hidden-import gamepad_linux \
+  --hidden-import gamepad_linux --hidden-import PIL._tkinter_finder \
   --exclude-module vgamepad --exclude-module pymem --exclude-module gamepad_win \
   --exclude-module scipy --exclude-module matplotlib --exclude-module pandas \
   app.py
